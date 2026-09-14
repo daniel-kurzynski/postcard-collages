@@ -54,7 +54,31 @@
   const addTextBtn = document.getElementById("addTextBtn");
   const resetBtn = document.getElementById("resetBtn");
   const exportBtn = document.getElementById("exportBtn");
+  const exportLabel = document.getElementById("exportLabel");
+  const emptyBgBtn = document.getElementById("emptyBgBtn");
+  const helpBtn = document.getElementById("helpBtn");
+  const helpDialog = document.getElementById("helpDialog");
+  const helpCloseBtn = document.getElementById("helpCloseBtn");
+  const toastEl = document.getElementById("toast");
   const viewportMeta = document.getElementById("viewportMeta");
+
+  // ---- Small UI helpers ----
+
+  // Inline SVG referencing the icon sprite in index.html.
+  function iconSvg(name, className = "icon") {
+    return `<svg class="${className}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  }
+
+  let toastTimer = null;
+  function showToast(message, { error = false, duration } = {}) {
+    clearTimeout(toastTimer);
+    toastEl.textContent = message;
+    toastEl.classList.toggle("error", error);
+    toastEl.hidden = false;
+    toastTimer = setTimeout(() => {
+      toastEl.hidden = true;
+    }, duration ?? (error ? 6000 : 3000));
+  }
 
   // Object URLs instead of base64 data URLs: a multi-megabyte phone photo
   // as a data URL is a huge string that gets re-parsed every time the
@@ -208,11 +232,18 @@
     safeZone.style.bottom = m + "px";
   }
 
+  function makeHandle(className, html, title) {
+    const h = document.createElement("div");
+    h.className = "handle " + className;
+    h.innerHTML = html;
+    h.title = title;
+    h.setAttribute("role", "button");
+    h.setAttribute("aria-label", title);
+    return h;
+  }
+
   function buildHandles(layerEl, onDelete, onResizeStart) {
-    const del = document.createElement("div");
-    del.className = "handle handle-delete";
-    del.textContent = "✕";
-    del.title = "Delete";
+    const del = makeHandle("handle-delete", iconSvg("x"), "Delete");
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -220,10 +251,7 @@
     });
     layerEl.appendChild(del);
 
-    const resize = document.createElement("div");
-    resize.className = "handle handle-resize";
-    resize.textContent = "⤡";
-    resize.title = "Resize";
+    const resize = makeHandle("handle-resize", iconSvg("resize"), "Resize");
     resize.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       onResizeStart(e);
@@ -282,11 +310,12 @@
   // The on-photo pills (crop zoom, tilt) are made of these. pointerdown is
   // stopped so a tap doesn't start a frame drag; dblclick is stopped so two
   // quick taps on "+" don't also toggle crop mode via the layer's dblclick.
-  function makePillButton(text, title, onClick, className) {
+  function makePillButton(html, title, onClick, className) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = text;
+    btn.innerHTML = html;
     btn.title = title;
+    btn.setAttribute("aria-label", title);
     if (className) btn.className = className;
     btn.addEventListener("pointerdown", (e) => e.stopPropagation());
     btn.addEventListener("dblclick", (e) => e.stopPropagation());
@@ -387,10 +416,7 @@
       (e) => startResizePhoto(e, p, el)
     );
 
-    const ratioBtn = document.createElement("div");
-    ratioBtn.className = "handle handle-ratio";
-    ratioBtn.textContent = `${p.ratioW}:${p.ratioH}`;
-    ratioBtn.title = "Switch aspect ratio";
+    const ratioBtn = makeHandle("handle-ratio", `${p.ratioW}:${p.ratioH}`, "Switch aspect ratio");
     ratioBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     ratioBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -398,10 +424,11 @@
     });
     el.appendChild(ratioBtn);
 
-    const panBtn = document.createElement("div");
-    panBtn.className = "handle handle-pan";
-    panBtn.textContent = "✋";
-    panBtn.title = "Adjust crop (pan/zoom)";
+    const panBtn = makeHandle(
+      "handle-pan",
+      iconSvg("crop", "icon icon-crop") + iconSvg("check", "icon icon-done"),
+      "Adjust crop (pan/zoom)"
+    );
     panBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     panBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -413,20 +440,20 @@
     // bottom-centre spot, so only one of them is ever visible.
     const zoomPill = document.createElement("div");
     zoomPill.className = "pill zoom-pill";
-    zoomPill.appendChild(makePillButton("−", "Zoom out", () => zoomPhoto(p, el, 1 / 1.2)));
-    zoomPill.appendChild(makePillButton("+", "Zoom in", () => zoomPhoto(p, el, 1.2)));
+    zoomPill.appendChild(makePillButton(iconSvg("minus"), "Zoom out", () => zoomPhoto(p, el, 1 / 1.2)));
+    zoomPill.appendChild(makePillButton(iconSvg("plus"), "Zoom in", () => zoomPhoto(p, el, 1.2)));
     el.appendChild(zoomPill);
 
     const tiltPill = document.createElement("div");
     tiltPill.className = "pill tilt-pill";
     tiltPill.appendChild(
-      makePillButton("↺", `Tilt left (${TILT_STEP}°)`, () => tiltPhoto(p, el, -TILT_STEP))
+      makePillButton(iconSvg("rotate-left"), `Tilt left (${TILT_STEP}°)`, () => tiltPhoto(p, el, -TILT_STEP))
     );
     tiltPill.appendChild(
       makePillButton(formatTilt(p.rotation || 0), "Straighten (reset tilt)", () => setTilt(p, el, 0), "tilt-label")
     );
     tiltPill.appendChild(
-      makePillButton("↻", `Tilt right (${TILT_STEP}°)`, () => tiltPhoto(p, el, TILT_STEP))
+      makePillButton(iconSvg("rotate-right"), `Tilt right (${TILT_STEP}°)`, () => tiltPhoto(p, el, TILT_STEP))
     );
     el.appendChild(tiltPill);
 
@@ -497,6 +524,16 @@
       () => deleteLayer(t.id),
       (e) => startResizeText(e, t, el)
     );
+
+    // Double-tap works too, but an explicit button is far more discoverable,
+    // especially on touch screens where there are no hover tooltips.
+    const editBtn = makeHandle("handle-edit", iconSvg("edit"), "Edit text");
+    editBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!textContent.isContentEditable) startEditingText(el, textContent, t);
+    });
+    el.appendChild(editBtn);
     return el;
   }
 
@@ -601,6 +638,7 @@
   };
 
   window.addEventListener("keydown", (e) => {
+    if (helpDialog.open) return;
     const active = document.activeElement;
     if (active && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
 
@@ -799,7 +837,7 @@
     try {
       loaded = await loadImageFile(file);
     } catch (err) {
-      alert(err.message);
+      showToast(err.message, { error: true });
       return;
     }
     releaseImage(state.background);
@@ -858,8 +896,10 @@
       }
     }
     render();
-    if (failed.length) alert(failed.join("\n"));
+    if (failed.length) showToast(failed.join(" "), { error: true });
   });
+
+  emptyBgBtn.addEventListener("click", () => bgInput.click());
 
   addTextBtn.addEventListener("click", () => {
     if (state.text) {
@@ -879,7 +919,8 @@
   });
 
   resetBtn.addEventListener("click", () => {
-    if (!confirm("Reset everything?")) return;
+    if (!hasContent()) return;
+    if (!confirm("Reset everything? This clears the whole collage.")) return;
     releaseImage(state.background);
     state.photos.forEach(releaseImage);
     state.background = null;
@@ -938,8 +979,12 @@
   }
 
   exportBtn.addEventListener("click", async () => {
+    if (!hasContent()) {
+      showToast("Nothing to export yet. Add a background or some photos first.");
+      return;
+    }
     exportBtn.disabled = true;
-    exportBtn.textContent = "Exporting…";
+    exportLabel.textContent = "Exporting…";
     try {
       await ensureFontsLoaded();
       const canvas = document.createElement("canvas");
@@ -999,12 +1044,23 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showToast("Exported postcard-jumbo.png at full print size.");
     } catch (err) {
-      alert("Export failed: " + (err && err.message ? err.message : err));
+      showToast("Export failed: " + (err && err.message ? err.message : err), { error: true });
     } finally {
       exportBtn.disabled = false;
-      exportBtn.textContent = "Export as PNG";
+      exportLabel.textContent = "Export PNG";
     }
+  });
+
+  // ---- Help ----
+
+  helpBtn.addEventListener("click", () => helpDialog.showModal());
+  helpCloseBtn.addEventListener("click", () => helpDialog.close());
+  // Clicking the dimmed backdrop (the dialog element itself, outside its
+  // content box) closes it.
+  helpDialog.addEventListener("click", (e) => {
+    if (e.target === helpDialog) helpDialog.close();
   });
 
   // ---- Leaving the page ----

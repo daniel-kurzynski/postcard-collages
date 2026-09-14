@@ -22,24 +22,32 @@ only and is never drawn into the exported PNG.
   a white frame with an equal-width border on all four sides
 - Switch a photo's inner crop aspect ratio (pill top-left on each photo:
   2:3 or 3:2)
+- All controls live on the selected element itself (crisp SVG icons, no
+  emoji); the **?** button in the toolbar opens a short guide to them
 - Drag photos to move them, drag the corner handle to resize (the frame's
   own aspect ratio is preserved), and delete them
 - Tilt a photo, frame and all, a few degrees to the left or right with the
   ↺/↻ pill at the bottom of a selected photo (3° per tap, up to ±45°); tap
   the angle in the middle to straighten it again. The tilt is rendered
   identically in the export
-- Adjust the crop: open the arrange mode via the ✋ handle (or double-click
-  the photo) and pan the image within the frame (drag) and zoom it (mouse
-  wheel or the +/− buttons) independently of moving/resizing the frame —
-  useful since uploaded photos rarely already match the frame's ratio
+- Adjust the crop: open crop mode via the crop handle bottom-left (or
+  double-click the photo) and pan the image within the frame (drag) and
+  zoom it (mouse wheel, pinch, or the −/+ buttons) independently of
+  moving/resizing the frame — useful since uploaded photos rarely already
+  match the frame's ratio. The handle turns into a check while crop mode
+  is active; tap it to finish
 - Add a text element (e.g. "Greetings from ..."), position it freely, edit
-  it via double-click, and resize it — black text with a thin white outline
+  it via the pencil handle or a double-click, and resize it — black text
+  with a thin white outline
 - Nudge the selected element with the arrow keys (Shift for bigger steps),
   delete it with <kbd>Del</kbd>, and press <kbd>Esc</kbd> to leave crop mode
   or deselect
 - Export the finished collage as a PNG at full print resolution
+- Feedback (failed image loads, export done) appears as a small toast at
+  the bottom of the screen rather than in blocking dialogs
 - The page warns before it is closed or reloaded while a collage is in
   progress, since nothing is saved anywhere
+- Light and dark colour schemes follow the system setting
 
 ## Running locally
 
@@ -66,7 +74,7 @@ No further configuration (no build step, no Node/npm) is needed, since
 ## Structure
 
 ```
-index.html   Page structure & toolbar
+index.html   Page structure, toolbar, SVG icon sprite, help dialog
 style.css    Layout & styling
 app.js       All editor logic (state, interaction, PNG export)
 ```
