@@ -1,8 +1,13 @@
 # Postcard Collage Creator
 
-A pure frontend web app for creating postcard collages (e.g. for print
-services like POKAmax), with no build step and no backend — ideal for
-GitHub Pages.
+This is a private, personal project: a small tool I built for myself to
+put together photo collages for the postcards I send. It is tailored to
+the one postcard format I use and is not meant as a general-purpose
+product, so there is no roadmap, no support, and no promise that it will
+work for anyone else's use case. Feel free to look around anyway.
+
+Technically it is a pure frontend web app with no build step and no
+backend, so it can be hosted straight from GitHub Pages.
 
 ## Format
 
