@@ -20,6 +20,10 @@
   const MIN_FONT_SIZE = 30;
   const MAX_FONT_SIZE = 600;
 
+  // POKAmax cuts ~35px (~6mm) off every edge in production ("Beschnitt").
+  // This is a visual editing guide only and is never drawn into the export.
+  const SAFE_MARGIN = 35;
+
   const state = {
     background: null, // { img, src }
     photos: [], // { id, img, x, y, w, h }
@@ -35,6 +39,8 @@
   const bgLayer = document.getElementById("bgLayer");
   const emptyHint = document.getElementById("emptyHint");
   const layersContainer = document.getElementById("layersContainer");
+  const safeZone = document.getElementById("safeZone");
+  const safeZoneToggle = document.getElementById("safeZoneToggle");
   const bgInput = document.getElementById("bgInput");
   const photoInput = document.getElementById("photoInput");
   const addTextBtn = document.getElementById("addTextBtn");
@@ -89,7 +95,18 @@
     layersContainer.innerHTML = "";
     state.photos.forEach((p) => layersContainer.appendChild(buildPhotoEl(p)));
     if (state.text) layersContainer.appendChild(buildTextEl(state.text));
+
+    const m = worldToScreen(SAFE_MARGIN);
+    safeZone.style.left = m + "px";
+    safeZone.style.top = m + "px";
+    safeZone.style.right = m + "px";
+    safeZone.style.bottom = m + "px";
+    safeZone.hidden = !safeZoneToggle.checked;
   }
+
+  safeZoneToggle.addEventListener("change", () => {
+    safeZone.hidden = !safeZoneToggle.checked;
+  });
 
   function buildHandles(layerEl, onDelete, onResizeStart) {
     const del = document.createElement("div");

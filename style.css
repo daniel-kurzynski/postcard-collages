@@ -82,6 +82,14 @@ body {
   color: #8a8072;
 }
 
+.toggle-btn {
+  gap: 8px;
+}
+
+.toggle-btn input {
+  margin: 0;
+}
+
 .stage-wrapper {
   width: 100%;
   display: flex;
@@ -131,6 +139,15 @@ body {
   position: absolute;
   inset: 0;
 }
+
+.safe-zone {
+  position: absolute;
+  border: 2px dashed #ffffff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+
+.safe-zone[hidden] { display: none; }
 
 .layer {
   position: absolute;

@@ -7,8 +7,14 @@ für GitHub Pages.
 ## Format
 
 Die App verwendet aktuell ein einziges Design: das **Jumbo-Postkarten-Format**
-(23,0 × 12,0 cm, exportiert mit 2787 × 1488 px, dem von Pokamax verwendeten
-Seitenverhältnis/Auflösung).
+von POKAmax (23,0 × 12,0 cm, Lieferformat 2787 × 1488 px).
+
+Beim Druck wird am Rand standardmäßig ein Beschnitt von 35 px (ca. 6 mm)
+abgeschnitten. Im Editor markiert eine gestrichelte Linie diesen
+Sicherheitsbereich (lässt sich über den Button „Sicherheitsbereich“ ein-
+und ausblenden); wichtige Bildinhalte oder Text sollten nicht außerhalb
+davon platziert werden. Die Markierung ist nur eine Editor-Hilfslinie und
+erscheint nicht im exportierten PNG.
 
 ## Funktionen
 

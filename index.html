@@ -27,6 +27,10 @@
       <input type="file" id="photoInput" accept="image/*" hidden>
     </label>
     <button type="button" id="addTextBtn" class="btn">Text hinzufügen</button>
+    <label class="btn toggle-btn">
+      <input type="checkbox" id="safeZoneToggle" checked>
+      Sicherheitsbereich
+    </label>
     <button type="button" id="resetBtn" class="btn btn-secondary">Zurücksetzen</button>
     <button type="button" id="exportBtn" class="btn btn-primary">Als PNG exportieren</button>
   </div>
@@ -36,10 +40,11 @@
       <div id="bgLayer" class="bg-layer"></div>
       <div id="emptyHint" class="empty-hint">Klicke auf „Hintergrund“, um ein Bild auszuwählen</div>
       <div id="layersContainer" class="layers-container"></div>
+      <div id="safeZone" class="safe-zone"></div>
     </div>
   </div>
 
-  <p class="hint">Ziehen zum Verschieben &middot; Ecke ziehen zum Skalieren &middot; Doppelklick auf Text zum Bearbeiten &middot; <kbd>Entf</kbd> löscht das ausgewählte Element</p>
+  <p class="hint">Ziehen zum Verschieben &middot; Ecke ziehen zum Skalieren &middot; Doppelklick auf Text zum Bearbeiten &middot; <kbd>Entf</kbd> löscht das ausgewählte Element &middot; die gestrichelte Linie zeigt den Sicherheitsbereich (Rand wird beim Druck ca. 6&nbsp;mm beschnitten)</p>
 </div>
 <script src="app.js"></script>
 </body>
