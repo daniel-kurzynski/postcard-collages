@@ -5,20 +5,20 @@
   const CANVAS_W = 2787;
   const CANVAS_H = 1488;
 
-  // Polaroid-style photo frame, defined in frame units (aspect-ratio locked).
-  const INNER_W = 200;
-  const INNER_H = 300; // inner image area is 2:3
-  const BORDER_SIDE = 22;
-  const BORDER_TOP = 22;
-  const BORDER_BOTTOM = 60;
-  const OUTER_W = INNER_W + BORDER_SIDE * 2;
-  const OUTER_H = INNER_H + BORDER_TOP + BORDER_BOTTOM;
-  const OUTER_ASPECT = OUTER_W / OUTER_H;
+  // Photo frame: white border, equal thickness on all four sides, sized as
+  // a fraction of the frame's own outer width (so it scales with the frame).
+  const BORDER_RATIO = 0.09;
+  const RATIO_PRESETS = [
+    { w: 2, h: 3 },
+    { w: 3, h: 2 },
+  ];
 
   const FONT_FAMILY = "'Caveat', cursive";
-  const MIN_PHOTO_W = OUTER_W * 0.4;
+  const MIN_PHOTO_W = 180;
   const MIN_FONT_SIZE = 30;
   const MAX_FONT_SIZE = 600;
+  const MIN_IMG_SCALE = 1;
+  const MAX_IMG_SCALE = 6;
 
   // POKAmax cuts ~35px (~6mm) off every edge in production ("Beschnitt").
   // This is a visual editing guide only and is never drawn into the export.
@@ -26,7 +26,7 @@
 
   const state = {
     background: null, // { img, src }
-    photos: [], // { id, img, x, y, w, h }
+    photos: [], // { id, img, src, x, y, w, h, ratioW, ratioH, imgScale, panX, panY, isPanning }
     text: null, // { id, content, x, y, fontSize }
     selectedId: null,
   };
@@ -76,6 +76,43 @@
     return Math.max(min, Math.min(max, v));
   }
 
+  // ---- Photo frame / crop geometry (shared by preview + export) ----
+
+  function outerHeightFor(w, ratioW, ratioH) {
+    const b = w * BORDER_RATIO;
+    const innerW = w - 2 * b;
+    const innerH = innerW / (ratioW / ratioH);
+    return innerH + 2 * b;
+  }
+
+  function getInnerRect(p) {
+    const b = p.w * BORDER_RATIO;
+    const iw = p.w - 2 * b;
+    const ih = iw / (p.ratioW / p.ratioH);
+    return { b, iw, ih, ix: p.x + b, iy: p.y + b };
+  }
+
+  // How the source image is scaled/positioned to cover the inner (iw x ih)
+  // box, given the layer's zoom (imgScale >= 1) and pan (panX/panY in 0..1).
+  function getCropGeometry(p, iw, ih) {
+    const nw = p.img.naturalWidth || p.img.width;
+    const nh = p.img.naturalHeight || p.img.height;
+    const baseScale = Math.max(iw / nw, ih / nh);
+    const effScale = baseScale * (p.imgScale || 1);
+    const drawnW = nw * effScale;
+    const drawnH = nh * effScale;
+    const rangeX = Math.max(0, drawnW - iw);
+    const rangeY = Math.max(0, drawnH - ih);
+    return {
+      drawnW,
+      drawnH,
+      rangeX,
+      rangeY,
+      offsetX: rangeX * (p.panX ?? 0.5),
+      offsetY: rangeY * (p.panY ?? 0.5),
+    };
+  }
+
   // ---- Rendering ----
 
   function render() {
@@ -112,6 +149,7 @@
     const del = document.createElement("div");
     del.className = "handle handle-delete";
     del.textContent = "✕";
+    del.title = "Löschen";
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -122,6 +160,7 @@
     const resize = document.createElement("div");
     resize.className = "handle handle-resize";
     resize.textContent = "⤡";
+    resize.title = "Größe ändern";
     resize.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       onResizeStart(e);
@@ -129,37 +168,151 @@
     layerEl.appendChild(resize);
   }
 
-  function buildPhotoEl(p) {
-    const el = document.createElement("div");
-    el.className = "layer" + (state.selectedId === p.id ? " selected" : "");
-    el.dataset.id = p.id;
+  function applyPhotoGeometry(p, el) {
     el.style.left = worldToScreen(p.x) + "px";
     el.style.top = worldToScreen(p.y) + "px";
     el.style.width = worldToScreen(p.w) + "px";
     el.style.height = worldToScreen(p.h) + "px";
 
+    const { b, iw, ih } = getInnerRect(p);
+    const cropBox = el.querySelector(".crop-box");
+    cropBox.style.left = worldToScreen(b) + "px";
+    cropBox.style.top = worldToScreen(b) + "px";
+    cropBox.style.width = worldToScreen(iw) + "px";
+    cropBox.style.height = worldToScreen(ih) + "px";
+
+    const { drawnW, drawnH, offsetX, offsetY } = getCropGeometry(p, iw, ih);
+    const img = cropBox.querySelector("img");
+    img.style.width = worldToScreen(drawnW) + "px";
+    img.style.height = worldToScreen(drawnH) + "px";
+    img.style.left = worldToScreen(-offsetX) + "px";
+    img.style.top = worldToScreen(-offsetY) + "px";
+  }
+
+  function zoomPhoto(p, el, factor) {
+    p.imgScale = clamp((p.imgScale || 1) * factor, MIN_IMG_SCALE, MAX_IMG_SCALE);
+    applyPhotoGeometry(p, el);
+  }
+
+  function buildPhotoEl(p) {
+    const el = document.createElement("div");
+    el.className =
+      "layer" +
+      (state.selectedId === p.id ? " selected" : "") +
+      (p.isPanning ? " panning" : "");
+    el.dataset.id = p.id;
+
     const frame = document.createElement("div");
     frame.className = "photo-frame";
-    frame.style.position = "absolute";
-    frame.style.inset = "0";
 
-    const k = p.w / OUTER_W;
+    const cropBox = document.createElement("div");
+    cropBox.className = "crop-box";
     const img = document.createElement("img");
     img.src = p.src;
-    img.style.left = worldToScreen(BORDER_SIDE * k) + "px";
-    img.style.top = worldToScreen(BORDER_TOP * k) + "px";
-    img.style.width = worldToScreen(INNER_W * k) + "px";
-    img.style.height = worldToScreen(INNER_H * k) + "px";
-    frame.appendChild(img);
+    img.draggable = false;
+    cropBox.appendChild(img);
+    frame.appendChild(cropBox);
     el.appendChild(frame);
 
-    el.addEventListener("pointerdown", (e) => startMove(e, p, el));
+    applyPhotoGeometry(p, el);
+
+    el.addEventListener("pointerdown", (e) => {
+      if (p.isPanning) startPan(e, p, el);
+      else startMove(e, p, el);
+    });
+    el.addEventListener("dblclick", () => togglePanning(p, el));
+    el.addEventListener(
+      "wheel",
+      (e) => {
+        if (!p.isPanning) return;
+        e.preventDefault();
+        zoomPhoto(p, el, e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      },
+      { passive: false }
+    );
+
     buildHandles(
       el,
       () => deleteLayer(p.id),
       (e) => startResizePhoto(e, p, el)
     );
+
+    const ratioBtn = document.createElement("div");
+    ratioBtn.className = "handle handle-ratio";
+    ratioBtn.textContent = `${p.ratioW}:${p.ratioH}`;
+    ratioBtn.title = "Seitenverhältnis wechseln";
+    ratioBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    ratioBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      cycleRatio(p, el, ratioBtn);
+    });
+    el.appendChild(ratioBtn);
+
+    const panBtn = document.createElement("div");
+    panBtn.className = "handle handle-pan";
+    panBtn.textContent = "✋";
+    panBtn.title = "Bildausschnitt anpassen (verschieben/zoomen)";
+    panBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    panBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      togglePanning(p, el);
+    });
+    el.appendChild(panBtn);
+
+    const zoomPill = document.createElement("div");
+    zoomPill.className = "zoom-pill";
+    const zoomOutBtn = document.createElement("button");
+    zoomOutBtn.type = "button";
+    zoomOutBtn.textContent = "−";
+    zoomOutBtn.title = "Verkleinern";
+    zoomOutBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    zoomOutBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      zoomPhoto(p, el, 1 / 1.2);
+    });
+    const zoomInBtn = document.createElement("button");
+    zoomInBtn.type = "button";
+    zoomInBtn.textContent = "+";
+    zoomInBtn.title = "Vergrößern";
+    zoomInBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    zoomInBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      zoomPhoto(p, el, 1.2);
+    });
+    zoomPill.appendChild(zoomOutBtn);
+    zoomPill.appendChild(zoomInBtn);
+    el.appendChild(zoomPill);
+
     return el;
+  }
+
+  function cycleRatio(p, el, ratioBtn) {
+    const idx = RATIO_PRESETS.findIndex(
+      (r) => r.w === p.ratioW && r.h === p.ratioH
+    );
+    const next = RATIO_PRESETS[(idx + 1) % RATIO_PRESETS.length];
+    p.ratioW = next.w;
+    p.ratioH = next.h;
+    p.h = outerHeightFor(p.w, p.ratioW, p.ratioH);
+    p.imgScale = 1;
+    p.panX = 0.5;
+    p.panY = 0.5;
+    ratioBtn.textContent = `${p.ratioW}:${p.ratioH}`;
+    applyPhotoGeometry(p, el);
+  }
+
+  function togglePanning(p, el) {
+    const next = !p.isPanning;
+    state.photos.forEach((other) => {
+      if (other !== p && other.isPanning) {
+        other.isPanning = false;
+        const oel = layersContainer.querySelector(`[data-id="${other.id}"]`);
+        if (oel) oel.classList.remove("panning");
+      }
+    });
+    p.isPanning = next;
+    select(p.id);
+    el.classList.toggle("panning", next);
   }
 
   function buildTextEl(t) {
@@ -227,9 +380,19 @@
   // by a selection change at the start of that same gesture.
   function select(id) {
     if (state.selectedId === id) return;
+    const prevId = state.selectedId;
     const prevEl = layersContainer.querySelector(".layer.selected");
     if (prevEl) prevEl.classList.remove("selected");
     state.selectedId = id;
+
+    if (prevId) {
+      const prevPhoto = state.photos.find((ph) => ph.id === prevId);
+      if (prevPhoto && prevPhoto.isPanning) {
+        prevPhoto.isPanning = false;
+        if (prevEl) prevEl.classList.remove("panning");
+      }
+    }
+
     if (id) {
       const el = layersContainer.querySelector(`[data-id="${id}"]`);
       if (el) el.classList.add("selected");
@@ -254,6 +417,15 @@
   });
 
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const panningPhoto = state.photos.find((p) => p.isPanning);
+      if (panningPhoto) {
+        panningPhoto.isPanning = false;
+        const el = layersContainer.querySelector(`[data-id="${panningPhoto.id}"]`);
+        if (el) el.classList.remove("panning");
+        return;
+      }
+    }
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const active = document.activeElement;
     if (active && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
@@ -293,7 +465,39 @@
     el.addEventListener("pointercancel", onUp);
   }
 
-  // ---- Drag: resize photo (uniform, aspect-locked) ----
+  // ---- Drag: pan the image within its (fixed) frame ----
+
+  function startPan(e, p, el) {
+    e.preventDefault();
+    e.stopPropagation();
+    select(p.id);
+    el.setPointerCapture(e.pointerId);
+    const { iw, ih } = getInnerRect(p);
+    const { rangeX, rangeY } = getCropGeometry(p, iw, ih);
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const startPanX = p.panX ?? 0.5;
+    const startPanY = p.panY ?? 0.5;
+
+    function onMove(ev) {
+      const dxWorld = screenToWorld(ev.clientX - startClientX);
+      const dyWorld = screenToWorld(ev.clientY - startClientY);
+      p.panX = rangeX > 0 ? clamp(startPanX - dxWorld / rangeX, 0, 1) : 0.5;
+      p.panY = rangeY > 0 ? clamp(startPanY - dyWorld / rangeY, 0, 1) : 0.5;
+      applyPhotoGeometry(p, el);
+    }
+    function onUp(ev) {
+      el.releasePointerCapture(ev.pointerId);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    }
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  }
+
+  // ---- Drag: resize photo (uniform, aspect-locked per its own ratio) ----
 
   function startResizePhoto(e, p, el) {
     e.preventDefault();
@@ -305,9 +509,9 @@
 
     function onMove(ev) {
       const dxWorld = screenToWorld(ev.clientX - startClientX);
-      let newW = clamp(startW + dxWorld, MIN_PHOTO_W, CANVAS_W * 1.3);
+      const newW = clamp(startW + dxWorld, MIN_PHOTO_W, CANVAS_W * 1.3);
       p.w = newW;
-      p.h = newW / OUTER_ASPECT;
+      p.h = outerHeightFor(p.w, p.ratioW, p.ratioH);
       applyPhotoGeometry(p, el);
     }
     function onUp(ev) {
@@ -319,17 +523,6 @@
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp);
     handle.addEventListener("pointercancel", onUp);
-  }
-
-  function applyPhotoGeometry(p, el) {
-    el.style.width = worldToScreen(p.w) + "px";
-    el.style.height = worldToScreen(p.h) + "px";
-    const k = p.w / OUTER_W;
-    const img = el.querySelector("img");
-    img.style.left = worldToScreen(BORDER_SIDE * k) + "px";
-    img.style.top = worldToScreen(BORDER_TOP * k) + "px";
-    img.style.width = worldToScreen(INNER_W * k) + "px";
-    img.style.height = worldToScreen(INNER_H * k) + "px";
   }
 
   // ---- Drag: resize text (font size) ----
@@ -390,10 +583,11 @@
     const { img, src } = await loadImageFile(file);
     const count = state.photos.length;
     const w = CANVAS_W * 0.22;
-    const h = w / OUTER_ASPECT;
     const [fx, fy] = PHOTO_SPAWN_SPOTS[count % PHOTO_SPAWN_SPOTS.length];
     const extraCycles = Math.floor(count / PHOTO_SPAWN_SPOTS.length);
     const jitter = extraCycles * CANVAS_W * 0.03;
+    const ratioW = RATIO_PRESETS[0].w;
+    const ratioH = RATIO_PRESETS[0].h;
     const layer = {
       id: genId(),
       img,
@@ -401,7 +595,13 @@
       x: CANVAS_W * fx + jitter,
       y: CANVAS_H * fy + jitter,
       w,
-      h,
+      h: outerHeightFor(w, ratioW, ratioH),
+      ratioW,
+      ratioH,
+      imgScale: 1,
+      panX: 0.5,
+      panY: 0.5,
+      isPanning: false,
     };
     state.photos.push(layer);
     state.selectedId = layer.id;
@@ -500,24 +700,22 @@
       }
 
       for (const p of state.photos) {
-        const k = p.w / OUTER_W;
+        const b = p.w * BORDER_RATIO;
         ctx.save();
         ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = 14 * k;
-        ctx.shadowOffsetY = 6 * k;
+        ctx.shadowBlur = b * 0.6;
+        ctx.shadowOffsetY = b * 0.25;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(p.x, p.y, p.w, p.h);
         ctx.restore();
 
-        const ix = p.x + BORDER_SIDE * k;
-        const iy = p.y + BORDER_TOP * k;
-        const iw = INNER_W * k;
-        const ih = INNER_H * k;
+        const { iw, ih, ix, iy } = getInnerRect(p);
+        const { drawnW, drawnH, offsetX, offsetY } = getCropGeometry(p, iw, ih);
         ctx.save();
         ctx.beginPath();
         ctx.rect(ix, iy, iw, ih);
         ctx.clip();
-        drawCover(ctx, p.img, ix, iy, iw, ih);
+        ctx.drawImage(p.img, ix - offsetX, iy - offsetY, drawnW, drawnH);
         ctx.restore();
       }
 

@@ -20,10 +20,16 @@ erscheint nicht im exportierten PNG.
 
 - Hintergrundbild auswählen (füllt die gesamte Postkarte, Bildausschnitt wie
   `background-size: cover`)
-- Beliebig viele Fotos hinzufügen, die in einem Polaroid-artigen weißen
-  Rahmen mit 2:3-Bildausschnitt dargestellt werden
+- Beliebig viele Fotos hinzufügen, die in einem weißen Rahmen mit gleich
+  breitem Rand auf allen vier Seiten dargestellt werden
+- Seitenverhältnis des Bildausschnitts pro Foto umschalten (Pille oben links
+  am Foto: 2:3 bzw. 3:2)
 - Fotos per Ziehen verschieben, über die Ecke skalieren (Seitenverhältnis
-  bleibt erhalten) und löschen
+  des Rahmens bleibt erhalten) und löschen
+- Bildausschnitt anpassen: über den ✋-Button (oder Doppelklick auf das Foto)
+  in den Anpassungsmodus wechseln und das Bild im Rahmen verschieben
+  (ziehen) sowie zoomen (Mausrad oder die +/−-Buttons) – wichtig, da
+  hochgeladene Fotos meist ein anderes Seitenverhältnis haben als der Rahmen
 - Ein Textelement (z. B. „Viele Grüße aus …“) hinzufügen, frei positionieren,
   per Doppelklick bearbeiten und in der Größe ändern – schwarze Schrift mit
   dünnem weißen Rand
