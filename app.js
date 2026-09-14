@@ -20,13 +20,22 @@
   const MIN_IMG_SCALE = 1;
   const MAX_IMG_SCALE = 6;
 
+  // Photo tilt: degrees added per tap on the ↺/↻ buttons, and the range a
+  // photo can be tilted to either side.
+  const TILT_STEP = 3;
+  const MAX_TILT = 45;
+
+  // Arrow-key nudge distance in canvas px (Shift for the larger step).
+  const NUDGE_STEP = 10;
+  const NUDGE_STEP_LARGE = 50;
+
   // POKAmax cuts ~35px (~6mm) off every edge in production ("Beschnitt").
   // This is a visual editing guide only and is never drawn into the export.
   const SAFE_MARGIN = 35;
 
   const state = {
     background: null, // { img, src }
-    photos: [], // { id, img, src, x, y, w, h, ratioW, ratioH, imgScale, panX, panY, isPanning }
+    photos: [], // { id, img, src, x, y, w, h, ratioW, ratioH, imgScale, panX, panY, rotation, isPanning }
     text: null, // { id, content, x, y, fontSize }
     selectedId: null,
   };
@@ -47,18 +56,33 @@
   const exportBtn = document.getElementById("exportBtn");
   const viewportMeta = document.getElementById("viewportMeta");
 
+  // Object URLs instead of base64 data URLs: a multi-megabyte phone photo
+  // as a data URL is a huge string that gets re-parsed every time the
+  // preview is rebuilt, which is noticeable on mobile. The URL is revoked
+  // via releaseImage() once the layer goes away.
   function loadImageFile(file) {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => resolve({ img, src: reader.result });
-        img.onerror = reject;
-        img.src = reader.result;
+      const src = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => resolve({ img, src });
+      img.onerror = () => {
+        URL.revokeObjectURL(src);
+        reject(
+          new Error(
+            `"${file.name}" could not be opened. It may not be an image format this browser supports (e.g. HEIC on Chrome).`
+          )
+        );
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      img.src = src;
     });
+  }
+
+  function releaseImage(layer) {
+    if (layer && layer.src) URL.revokeObjectURL(layer.src);
+  }
+
+  function hasContent() {
+    return Boolean(state.background || state.photos.length || state.text);
   }
 
   function updateScale() {
@@ -74,6 +98,34 @@
 
   function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
+  }
+
+  function degToRad(deg) {
+    return (deg * Math.PI) / 180;
+  }
+
+  // Converts a drag delta (in world units, screen orientation) into a tilted
+  // photo's own coordinate system, so resizing and crop-panning follow the
+  // frame's edges rather than the screen axes. Identity at 0°.
+  function toLocalDelta(p, dx, dy) {
+    const a = degToRad(p.rotation || 0);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    return { dx: dx * cos + dy * sin, dy: -dx * sin + dy * cos };
+  }
+
+  function getLayerById(id) {
+    if (state.text && state.text.id === id) return state.text;
+    return state.photos.find((p) => p.id === id) || null;
+  }
+
+  function getLayerEl(id) {
+    return layersContainer.querySelector(`[data-id="${id}"]`);
+  }
+
+  function formatTilt(deg) {
+    if (deg === 0) return "0°";
+    return (deg < 0 ? "−" : "+") + Math.abs(deg) + "°";
   }
 
   // Touch pointers can go away (lifted, or the gesture cancelled by the OS)
@@ -136,16 +188,14 @@
   function render() {
     updateScale();
 
+    bgLayer.innerHTML = "";
     if (state.background) {
-      bgLayer.innerHTML = "";
       const img = document.createElement("img");
       img.src = state.background.src;
+      img.draggable = false;
       bgLayer.appendChild(img);
-      emptyHint.style.display = "none";
-    } else {
-      bgLayer.innerHTML = "";
-      emptyHint.style.display = "flex";
     }
+    emptyHint.style.display = state.background ? "none" : "flex";
 
     layersContainer.innerHTML = "";
     state.photos.forEach((p) => layersContainer.appendChild(buildPhotoEl(p)));
@@ -181,11 +231,18 @@
     layerEl.appendChild(resize);
   }
 
+  function applyLayerPosition(layer, el) {
+    el.style.left = worldToScreen(layer.x) + "px";
+    el.style.top = worldToScreen(layer.y) + "px";
+  }
+
   function applyPhotoGeometry(p, el) {
-    el.style.left = worldToScreen(p.x) + "px";
-    el.style.top = worldToScreen(p.y) + "px";
+    applyLayerPosition(p, el);
     el.style.width = worldToScreen(p.w) + "px";
     el.style.height = worldToScreen(p.h) + "px";
+    // Rotation is about the frame's centre (transform-origin in CSS), and
+    // the export rotates about the same point, so preview and PNG match.
+    el.style.transform = p.rotation ? `rotate(${p.rotation}deg)` : "";
 
     const { b, iw, ih } = getInnerRect(p);
     const cropBox = el.querySelector(".crop-box");
@@ -211,6 +268,35 @@
     setPhotoScale(p, el, (p.imgScale || 1) * factor);
   }
 
+  function setTilt(p, el, deg) {
+    p.rotation = clamp(Math.round(deg), -MAX_TILT, MAX_TILT);
+    const label = el.querySelector(".tilt-label");
+    if (label) label.textContent = formatTilt(p.rotation);
+    applyPhotoGeometry(p, el);
+  }
+
+  function tiltPhoto(p, el, deltaDeg) {
+    setTilt(p, el, (p.rotation || 0) + deltaDeg);
+  }
+
+  // The on-photo pills (crop zoom, tilt) are made of these. pointerdown is
+  // stopped so a tap doesn't start a frame drag; dblclick is stopped so two
+  // quick taps on "+" don't also toggle crop mode via the layer's dblclick.
+  function makePillButton(text, title, onClick, className) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = text;
+    btn.title = title;
+    if (className) btn.className = className;
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    btn.addEventListener("dblclick", (e) => e.stopPropagation());
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return btn;
+  }
+
   // Pointer/touch gestures on a photo layer: one finger moves the frame (or
   // pans the crop in arrange mode), two fingers pinch-zoom the crop while
   // in arrange mode. Tracking every active pointer here (rather than only
@@ -228,7 +314,7 @@
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
       if (pointers.size === 1) {
-        if (p.isPanning) startPan(e, p, el);
+        if (p.isPanning) startPan(e, p, el, () => pointers.size > 1);
         else startMove(e, p, el);
         return;
       }
@@ -257,7 +343,10 @@
     el.addEventListener("pointerup", release);
     el.addEventListener("pointercancel", release);
 
-    el.addEventListener("dblclick", () => togglePanning(p, el));
+    el.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".handle")) return;
+      togglePanning(p, el);
+    });
     el.addEventListener(
       "wheel",
       (e) => {
@@ -320,29 +409,26 @@
     });
     el.appendChild(panBtn);
 
+    // Crop zoom (shown in crop mode) and tilt (shown otherwise) share the
+    // bottom-centre spot, so only one of them is ever visible.
     const zoomPill = document.createElement("div");
-    zoomPill.className = "zoom-pill";
-    const zoomOutBtn = document.createElement("button");
-    zoomOutBtn.type = "button";
-    zoomOutBtn.textContent = "−";
-    zoomOutBtn.title = "Zoom out";
-    zoomOutBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-    zoomOutBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      zoomPhoto(p, el, 1 / 1.2);
-    });
-    const zoomInBtn = document.createElement("button");
-    zoomInBtn.type = "button";
-    zoomInBtn.textContent = "+";
-    zoomInBtn.title = "Zoom in";
-    zoomInBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-    zoomInBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      zoomPhoto(p, el, 1.2);
-    });
-    zoomPill.appendChild(zoomOutBtn);
-    zoomPill.appendChild(zoomInBtn);
+    zoomPill.className = "pill zoom-pill";
+    zoomPill.appendChild(makePillButton("−", "Zoom out", () => zoomPhoto(p, el, 1 / 1.2)));
+    zoomPill.appendChild(makePillButton("+", "Zoom in", () => zoomPhoto(p, el, 1.2)));
     el.appendChild(zoomPill);
+
+    const tiltPill = document.createElement("div");
+    tiltPill.className = "pill tilt-pill";
+    tiltPill.appendChild(
+      makePillButton("↺", `Tilt left (${TILT_STEP}°)`, () => tiltPhoto(p, el, -TILT_STEP))
+    );
+    tiltPill.appendChild(
+      makePillButton(formatTilt(p.rotation || 0), "Straighten (reset tilt)", () => setTilt(p, el, 0), "tilt-label")
+    );
+    tiltPill.appendChild(
+      makePillButton("↻", `Tilt right (${TILT_STEP}°)`, () => tiltPhoto(p, el, TILT_STEP))
+    );
+    el.appendChild(tiltPill);
 
     return el;
   }
@@ -367,7 +453,7 @@
     state.photos.forEach((other) => {
       if (other !== p && other.isPanning) {
         other.isPanning = false;
-        const oel = layersContainer.querySelector(`[data-id="${other.id}"]`);
+        const oel = getLayerEl(other.id);
         if (oel) oel.classList.remove("panning");
       }
     });
@@ -381,8 +467,7 @@
     el.className =
       "layer text-layer" + (state.selectedId === t.id ? " selected" : "");
     el.dataset.id = t.id;
-    el.style.left = worldToScreen(t.x) + "px";
-    el.style.top = worldToScreen(t.y) + "px";
+    applyLayerPosition(t, el);
     el.style.fontSize = worldToScreen(t.fontSize) + "px";
     el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
 
@@ -402,7 +487,10 @@
       if (textContent.isContentEditable) return;
       startMove(e, t, el);
     });
-    el.addEventListener("dblclick", () => startEditingText(el, textContent, t));
+    el.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".handle") || textContent.isContentEditable) return;
+      startEditingText(el, textContent, t);
+    });
 
     buildHandles(
       el,
@@ -479,7 +567,7 @@
     }
 
     if (id) {
-      const el = layersContainer.querySelector(`[data-id="${id}"]`);
+      const el = getLayerEl(id);
       if (el) el.classList.add("selected");
     }
   }
@@ -489,7 +577,11 @@
   }
 
   function deleteLayer(id) {
-    state.photos = state.photos.filter((p) => p.id !== id);
+    state.photos = state.photos.filter((p) => {
+      if (p.id !== id) return true;
+      releaseImage(p);
+      return false;
+    });
     if (state.text && state.text.id === id) state.text = null;
     if (state.selectedId === id) state.selectedId = null;
     render();
@@ -501,22 +593,48 @@
     }
   });
 
+  const ARROW_DELTAS = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  };
+
   window.addEventListener("keydown", (e) => {
+    const active = document.activeElement;
+    if (active && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+
     if (e.key === "Escape") {
       const panningPhoto = state.photos.find((p) => p.isPanning);
       if (panningPhoto) {
         panningPhoto.isPanning = false;
-        const el = layersContainer.querySelector(`[data-id="${panningPhoto.id}"]`);
+        const el = getLayerEl(panningPhoto.id);
         if (el) el.classList.remove("panning");
-        return;
+      } else {
+        deselect();
       }
+      return;
     }
-    if (e.key !== "Delete" && e.key !== "Backspace") return;
-    const active = document.activeElement;
-    if (active && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+
     if (!state.selectedId) return;
-    e.preventDefault();
-    deleteLayer(state.selectedId);
+    const layer = getLayerById(state.selectedId);
+    const el = getLayerEl(state.selectedId);
+    if (!layer || !el) return;
+
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      deleteLayer(state.selectedId);
+      return;
+    }
+
+    const arrow = ARROW_DELTAS[e.key];
+    if (arrow) {
+      e.preventDefault();
+      const step = e.shiftKey ? NUDGE_STEP_LARGE : NUDGE_STEP;
+      layer.x += arrow[0] * step;
+      layer.y += arrow[1] * step;
+      applyLayerPosition(layer, el);
+    }
   });
 
   // ---- Drag: move ----
@@ -537,8 +655,7 @@
       const dy = screenToWorld(ev.clientY - startClientY);
       layer.x = startX + dx;
       layer.y = startY + dy;
-      el.style.left = worldToScreen(layer.x) + "px";
-      el.style.top = worldToScreen(layer.y) + "px";
+      applyLayerPosition(layer, el);
     }
     function onUp(ev) {
       if (ev.pointerId !== e.pointerId) return;
@@ -554,24 +671,39 @@
 
   // ---- Drag: pan the image within its (fixed) frame ----
 
-  function startPan(e, p, el) {
+  // isMultiTouch reports whether a second finger is currently down (pinch
+  // zoom). While it is, this one-finger pan stands down instead of fighting
+  // the pinch, and re-baselines so the crop doesn't jump when the pinch ends.
+  function startPan(e, p, el, isMultiTouch = () => false) {
     e.preventDefault();
     e.stopPropagation();
     select(p.id);
     safeSetPointerCapture(el, e.pointerId);
     const { iw, ih } = getInnerRect(p);
-    const { rangeX, rangeY } = getCropGeometry(p, iw, ih);
-    const startClientX = e.clientX;
-    const startClientY = e.clientY;
-    const startPanX = p.panX ?? 0.5;
-    const startPanY = p.panY ?? 0.5;
+    let startClientX = e.clientX;
+    let startClientY = e.clientY;
+    let startPanX = p.panX ?? 0.5;
+    let startPanY = p.panY ?? 0.5;
 
     function onMove(ev) {
       if (ev.pointerId !== e.pointerId) return;
-      const dxWorld = screenToWorld(ev.clientX - startClientX);
-      const dyWorld = screenToWorld(ev.clientY - startClientY);
-      p.panX = rangeX > 0 ? clamp(startPanX - dxWorld / rangeX, 0, 1) : 0.5;
-      p.panY = rangeY > 0 ? clamp(startPanY - dyWorld / rangeY, 0, 1) : 0.5;
+      if (isMultiTouch()) {
+        startClientX = ev.clientX;
+        startClientY = ev.clientY;
+        startPanX = p.panX ?? 0.5;
+        startPanY = p.panY ?? 0.5;
+        return;
+      }
+      // The pinch may have changed the zoom, so the pan range is re-read
+      // on every move rather than captured once at pan start.
+      const { rangeX, rangeY } = getCropGeometry(p, iw, ih);
+      const { dx, dy } = toLocalDelta(
+        p,
+        screenToWorld(ev.clientX - startClientX),
+        screenToWorld(ev.clientY - startClientY)
+      );
+      p.panX = rangeX > 0 ? clamp(startPanX - dx / rangeX, 0, 1) : 0.5;
+      p.panY = rangeY > 0 ? clamp(startPanY - dy / rangeY, 0, 1) : 0.5;
       applyPhotoGeometry(p, el);
     }
     function onUp(ev) {
@@ -594,11 +726,17 @@
     const handle = e.currentTarget;
     safeSetPointerCapture(handle, e.pointerId);
     const startClientX = e.clientX;
+    const startClientY = e.clientY;
     const startW = p.w;
 
     function onMove(ev) {
       if (ev.pointerId !== e.pointerId) return;
-      const dxWorld = screenToWorld(ev.clientX - startClientX);
+      // Project the drag onto the (possibly tilted) frame's own x-axis.
+      const { dx: dxWorld } = toLocalDelta(
+        p,
+        screenToWorld(ev.clientX - startClientX),
+        screenToWorld(ev.clientY - startClientY)
+      );
       const newW = clamp(startW + dxWorld, MIN_PHOTO_W, CANVAS_W * 1.3);
       p.w = newW;
       p.h = outerHeightFor(p.w, p.ratioW, p.ratioH);
@@ -653,10 +791,19 @@
 
   bgInput.addEventListener("change", async () => {
     const file = bgInput.files[0];
-    if (!file) return;
-    const { img, src } = await loadImageFile(file);
-    state.background = { img, src };
+    // Clear before the (async) load so picking the same file again works
+    // even if this attempt fails.
     bgInput.value = "";
+    if (!file) return;
+    let loaded;
+    try {
+      loaded = await loadImageFile(file);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    releaseImage(state.background);
+    state.background = loaded;
     render();
   });
 
@@ -670,10 +817,7 @@
     [0.34, 0.30],
   ];
 
-  photoInput.addEventListener("change", async () => {
-    const file = photoInput.files[0];
-    if (!file) return;
-    const { img, src } = await loadImageFile(file);
+  function addPhoto({ img, src }) {
     const count = state.photos.length;
     const w = CANVAS_W * 0.22;
     const [fx, fy] = PHOTO_SPAWN_SPOTS[count % PHOTO_SPAWN_SPOTS.length];
@@ -694,12 +838,27 @@
       imgScale: 1,
       panX: 0.5,
       panY: 0.5,
+      rotation: 0,
       isPanning: false,
     };
     state.photos.push(layer);
     state.selectedId = layer.id;
+  }
+
+  photoInput.addEventListener("change", async () => {
+    const files = [...photoInput.files];
     photoInput.value = "";
+    if (!files.length) return;
+    const failed = [];
+    for (const file of files) {
+      try {
+        addPhoto(await loadImageFile(file));
+      } catch (err) {
+        failed.push(err.message);
+      }
+    }
     render();
+    if (failed.length) alert(failed.join("\n"));
   });
 
   addTextBtn.addEventListener("click", () => {
@@ -721,6 +880,8 @@
 
   resetBtn.addEventListener("click", () => {
     if (!confirm("Reset everything?")) return;
+    releaseImage(state.background);
+    state.photos.forEach(releaseImage);
     state.background = null;
     state.photos = [];
     state.text = null;
@@ -795,6 +956,16 @@
       for (const p of state.photos) {
         const b = p.w * BORDER_RATIO;
         ctx.save();
+        if (p.rotation) {
+          // Same pivot as the CSS transform-origin: the frame's centre.
+          const cx = p.x + p.w / 2;
+          const cy = p.y + p.h / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate(degToRad(p.rotation));
+          ctx.translate(-cx, -cy);
+        }
+
+        ctx.save();
         ctx.shadowColor = "rgba(0,0,0,0.35)";
         ctx.shadowBlur = b * 0.6;
         ctx.shadowOffsetY = b * 0.25;
@@ -810,26 +981,40 @@
         ctx.clip();
         ctx.drawImage(p.img, ix - offsetX, iy - offsetY, drawnW, drawnH);
         ctx.restore();
+
+        ctx.restore();
       }
 
       if (state.text && state.text.content.trim()) {
         drawText(ctx, state.text);
       }
 
-      canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "postcard-jumbo.png";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      }, "image/png");
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("the browser could not encode the PNG");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "postcard-jumbo.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      alert("Export failed: " + (err && err.message ? err.message : err));
     } finally {
       exportBtn.disabled = false;
       exportBtn.textContent = "Export as PNG";
     }
+  });
+
+  // ---- Leaving the page ----
+
+  // Nothing is persisted, so an accidental back-swipe or tab close would
+  // throw the whole collage away. Ask first once there's something to lose.
+  window.addEventListener("beforeunload", (e) => {
+    if (!hasContent()) return;
+    e.preventDefault();
+    e.returnValue = "";
   });
 
   // ---- Responsive ----
