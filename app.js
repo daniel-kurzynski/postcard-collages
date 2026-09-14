@@ -45,6 +45,7 @@
   const addTextBtn = document.getElementById("addTextBtn");
   const resetBtn = document.getElementById("resetBtn");
   const exportBtn = document.getElementById("exportBtn");
+  const viewportMeta = document.getElementById("viewportMeta");
 
   function loadImageFile(file) {
     return new Promise((resolve, reject) => {
@@ -73,6 +74,24 @@
 
   function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
+  }
+
+  // Touch pointers can go away (lifted, or the gesture cancelled by the OS)
+  // in the moment between a pointerdown and these calls, which throws.
+  // That's a normal race on touch devices, not a bug worth surfacing.
+  function safeSetPointerCapture(el, pointerId) {
+    try {
+      el.setPointerCapture(pointerId);
+    } catch (err) {
+      /* pointer already gone */
+    }
+  }
+  function safeReleasePointerCapture(el, pointerId) {
+    try {
+      el.releasePointerCapture(pointerId);
+    } catch (err) {
+      /* pointer already gone */
+    }
   }
 
   // ---- Photo frame / crop geometry (shared by preview + export) ----
@@ -183,9 +202,71 @@
     img.style.top = worldToScreen(-offsetY) + "px";
   }
 
-  function zoomPhoto(p, el, factor) {
-    p.imgScale = clamp((p.imgScale || 1) * factor, MIN_IMG_SCALE, MAX_IMG_SCALE);
+  function setPhotoScale(p, el, scale) {
+    p.imgScale = clamp(scale, MIN_IMG_SCALE, MAX_IMG_SCALE);
     applyPhotoGeometry(p, el);
+  }
+
+  function zoomPhoto(p, el, factor) {
+    setPhotoScale(p, el, (p.imgScale || 1) * factor);
+  }
+
+  // Pointer/touch gestures on a photo layer: one finger moves the frame (or
+  // pans the crop in arrange mode), two fingers pinch-zoom the crop while
+  // in arrange mode. Tracking every active pointer here (rather than only
+  // the first) is what lets a second touch join mid-gesture on mobile.
+  function attachPhotoGestures(p, el) {
+    const pointers = new Map(); // pointerId -> {x, y}
+    let pinch = null; // { startDist, startScale }
+
+    function pinchDistance() {
+      const pts = [...pointers.values()];
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    }
+
+    el.addEventListener("pointerdown", (e) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size === 1) {
+        if (p.isPanning) startPan(e, p, el);
+        else startMove(e, p, el);
+        return;
+      }
+
+      if (pointers.size === 2 && p.isPanning) {
+        pinch = {
+          startDist: Math.max(1, pinchDistance()),
+          startScale: p.imgScale || 1,
+        };
+      }
+    });
+
+    el.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && pointers.size === 2) {
+        const factor = pinchDistance() / pinch.startDist;
+        setPhotoScale(p, el, pinch.startScale * factor);
+      }
+    });
+
+    function release(e) {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+    }
+    el.addEventListener("pointerup", release);
+    el.addEventListener("pointercancel", release);
+
+    el.addEventListener("dblclick", () => togglePanning(p, el));
+    el.addEventListener(
+      "wheel",
+      (e) => {
+        if (!p.isPanning) return;
+        e.preventDefault();
+        zoomPhoto(p, el, e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      },
+      { passive: false }
+    );
   }
 
   function buildPhotoEl(p) {
@@ -209,21 +290,7 @@
     el.appendChild(frame);
 
     applyPhotoGeometry(p, el);
-
-    el.addEventListener("pointerdown", (e) => {
-      if (p.isPanning) startPan(e, p, el);
-      else startMove(e, p, el);
-    });
-    el.addEventListener("dblclick", () => togglePanning(p, el));
-    el.addEventListener(
-      "wheel",
-      (e) => {
-        if (!p.isPanning) return;
-        e.preventDefault();
-        zoomPhoto(p, el, e.deltaY < 0 ? 1.1 : 1 / 1.1);
-      },
-      { passive: false }
-    );
+    attachPhotoGestures(p, el);
 
     buildHandles(
       el,
@@ -318,14 +385,24 @@
     el.style.top = worldToScreen(t.y) + "px";
     el.style.fontSize = worldToScreen(t.fontSize) + "px";
     el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
-    el.textContent = t.content;
-    el.spellcheck = false;
+
+    // The editable text lives in its own child element, separate from the
+    // delete/resize handles below. Handles are also children of `el` (for
+    // corner positioning), so if `el` itself became contentEditable, a
+    // "select all" while editing (which double-click/double-tap starts
+    // with) would select the handle icons too, letting them be typed over
+    // or leak into the saved text content.
+    const textContent = document.createElement("span");
+    textContent.className = "text-content";
+    textContent.textContent = t.content;
+    textContent.spellcheck = false;
+    el.appendChild(textContent);
 
     el.addEventListener("pointerdown", (e) => {
-      if (el.isContentEditable) return;
+      if (textContent.isContentEditable) return;
       startMove(e, t, el);
     });
-    el.addEventListener("dblclick", () => startEditingText(el, t));
+    el.addEventListener("dblclick", () => startEditingText(el, textContent, t));
 
     buildHandles(
       el,
@@ -335,33 +412,47 @@
     return el;
   }
 
-  function startEditingText(el, t) {
+  function startEditingText(el, textContent, t) {
     el.classList.add("editing");
-    el.contentEditable = "true";
-    el.focus();
+    // touch-action is restrictive by intersecting every ancestor's value,
+    // so `.stage`'s touch-action: none (needed while dragging/resizing
+    // layers) would otherwise still block native touch text-selection
+    // gestures on `textContent` even though it opts back into "auto".
+    stage.classList.add("editing-text");
+    textContent.contentEditable = "true";
+
+    // Mobile Safari zooms the whole page in when a small-font editable
+    // element is focused. Cap the zoom while editing, then restore
+    // whatever zoom range the page normally allows.
+    const originalViewport = viewportMeta.getAttribute("content");
+    viewportMeta.setAttribute("content", originalViewport + ", maximum-scale=1");
+
+    textContent.focus();
     const range = document.createRange();
-    range.selectNodeContents(el);
+    range.selectNodeContents(textContent);
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
 
     const commit = () => {
-      el.removeEventListener("blur", commit);
-      el.contentEditable = "false";
+      textContent.removeEventListener("blur", commit);
+      textContent.contentEditable = "false";
       el.classList.remove("editing");
-      const value = el.innerText.replace(/\r/g, "");
+      stage.classList.remove("editing-text");
+      viewportMeta.setAttribute("content", originalViewport);
+      const value = textContent.innerText.replace(/\r/g, "");
       t.content = value.trim() === "" ? t.content : value;
       render();
     };
-    el.addEventListener("blur", commit);
-    el.addEventListener("keydown", (e) => {
+    textContent.addEventListener("blur", commit);
+    textContent.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        el.blur();
+        textContent.blur();
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        el.blur();
+        textContent.blur();
       }
     });
   }
@@ -434,13 +525,14 @@
     if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
     e.preventDefault();
     select(layer.id);
-    el.setPointerCapture(e.pointerId);
+    safeSetPointerCapture(el, e.pointerId);
     const startClientX = e.clientX;
     const startClientY = e.clientY;
     const startX = layer.x;
     const startY = layer.y;
 
     function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
       const dx = screenToWorld(ev.clientX - startClientX);
       const dy = screenToWorld(ev.clientY - startClientY);
       layer.x = startX + dx;
@@ -449,7 +541,8 @@
       el.style.top = worldToScreen(layer.y) + "px";
     }
     function onUp(ev) {
-      el.releasePointerCapture(ev.pointerId);
+      if (ev.pointerId !== e.pointerId) return;
+      safeReleasePointerCapture(el, ev.pointerId);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
@@ -465,7 +558,7 @@
     e.preventDefault();
     e.stopPropagation();
     select(p.id);
-    el.setPointerCapture(e.pointerId);
+    safeSetPointerCapture(el, e.pointerId);
     const { iw, ih } = getInnerRect(p);
     const { rangeX, rangeY } = getCropGeometry(p, iw, ih);
     const startClientX = e.clientX;
@@ -474,6 +567,7 @@
     const startPanY = p.panY ?? 0.5;
 
     function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
       const dxWorld = screenToWorld(ev.clientX - startClientX);
       const dyWorld = screenToWorld(ev.clientY - startClientY);
       p.panX = rangeX > 0 ? clamp(startPanX - dxWorld / rangeX, 0, 1) : 0.5;
@@ -481,7 +575,8 @@
       applyPhotoGeometry(p, el);
     }
     function onUp(ev) {
-      el.releasePointerCapture(ev.pointerId);
+      if (ev.pointerId !== e.pointerId) return;
+      safeReleasePointerCapture(el, ev.pointerId);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
@@ -497,11 +592,12 @@
     e.preventDefault();
     select(p.id);
     const handle = e.currentTarget;
-    handle.setPointerCapture(e.pointerId);
+    safeSetPointerCapture(handle, e.pointerId);
     const startClientX = e.clientX;
     const startW = p.w;
 
     function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
       const dxWorld = screenToWorld(ev.clientX - startClientX);
       const newW = clamp(startW + dxWorld, MIN_PHOTO_W, CANVAS_W * 1.3);
       p.w = newW;
@@ -509,7 +605,8 @@
       applyPhotoGeometry(p, el);
     }
     function onUp(ev) {
-      handle.releasePointerCapture(ev.pointerId);
+      if (ev.pointerId !== e.pointerId) return;
+      safeReleasePointerCapture(handle, ev.pointerId);
       handle.removeEventListener("pointermove", onMove);
       handle.removeEventListener("pointerup", onUp);
       handle.removeEventListener("pointercancel", onUp);
@@ -525,7 +622,7 @@
     e.preventDefault();
     select(t.id);
     const handle = e.currentTarget;
-    handle.setPointerCapture(e.pointerId);
+    safeSetPointerCapture(handle, e.pointerId);
     const rect = el.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -533,6 +630,7 @@
     const startFont = t.fontSize;
 
     function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
       const dist = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
       const factor = dist / startDist;
       t.fontSize = clamp(startFont * factor, MIN_FONT_SIZE, MAX_FONT_SIZE);
@@ -540,7 +638,8 @@
       el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
     }
     function onUp(ev) {
-      handle.releasePointerCapture(ev.pointerId);
+      if (ev.pointerId !== e.pointerId) return;
+      safeReleasePointerCapture(handle, ev.pointerId);
       handle.removeEventListener("pointermove", onMove);
       handle.removeEventListener("pointerup", onUp);
       handle.removeEventListener("pointercancel", onUp);

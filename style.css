@@ -18,6 +18,10 @@ body {
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  /* A drag that overshoots the stage shouldn't trigger Android Chrome's
+     pull-to-refresh or an elastic overscroll bounce. */
+  overscroll-behavior-y: contain;
 }
 
 #app {
@@ -91,7 +95,7 @@ body {
 
 .stage {
   position: relative;
-  width: min(1100px, 94vw);
+  width: min(1100px, 100%);
   aspect-ratio: 2787 / 1488;
   background: #e5e1d6 repeating-conic-gradient(#e9e5da 0% 25%, #e5e1d6 0% 50%) 0 0 / 24px 24px;
   overflow: hidden;
@@ -99,6 +103,14 @@ body {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   touch-action: none;
   user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* touch-action is the intersection of an element's value and all its
+   ancestors', so this has to relax the whole stage, not just the text
+   layer being edited, for native touch text-selection to work. */
+.stage.editing-text {
+  touch-action: auto;
 }
 
 .bg-layer {
@@ -183,6 +195,9 @@ body {
   -webkit-text-stroke: 4px #fff;
   paint-order: stroke fill;
   min-width: 20px;
+}
+
+.text-content {
   outline: none;
 }
 
@@ -190,19 +205,24 @@ body {
   cursor: text;
   background: rgba(255, 255, 255, 0.35);
   border-radius: 6px;
+  /* Paired with .stage.editing-text: lets native touch text-selection
+     (tap to place caret, drag handles, double-tap to select a word) work
+     instead of the drag-the-layer handling the rest of the app relies on. */
+  touch-action: auto;
+  -webkit-touch-callout: default;
 }
 
 .handle {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   touch-action: none;
   cursor: pointer;
@@ -212,34 +232,34 @@ body {
 .layer.selected .handle { display: flex; }
 
 .handle-delete {
-  top: -14px;
-  right: -14px;
+  top: -16px;
+  right: -16px;
   background: #b53c3c;
 }
 
 .handle-resize {
-  bottom: -14px;
-  right: -14px;
+  bottom: -16px;
+  right: -16px;
   cursor: nwse-resize;
 }
 
 .handle-ratio {
-  top: -14px;
-  left: -14px;
+  top: -16px;
+  left: -16px;
   width: auto;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 13px;
-  font-size: 0.72rem;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   background: #4a4640;
 }
 
 .handle-pan {
-  bottom: -14px;
-  left: -14px;
-  font-size: 15px;
+  bottom: -16px;
+  left: -16px;
+  font-size: 16px;
   background: #4a4640;
 }
 
@@ -249,13 +269,16 @@ body {
 
 .zoom-pill {
   position: absolute;
-  top: -16px;
+  /* Bottom, not top: the top edge already carries the wide ratio pill at
+     top-left, which collides with a centered pill on a narrow frame (small
+     photos on narrow phone screens render quite small on-screen). */
+  bottom: -18px;
   left: 50%;
   transform: translateX(-50%);
   display: none;
-  gap: 4px;
+  gap: 6px;
   padding: 3px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: rgba(20, 18, 15, 0.75);
   z-index: 6;
 }
@@ -267,12 +290,12 @@ body {
 .zoom-pill button {
   appearance: none;
   border: none;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #6b655a;
   color: #fff;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
   touch-action: none;
@@ -323,4 +346,15 @@ kbd {
 @media (max-width: 480px) {
   .app-header h1 { font-size: 1.2rem; }
   .btn { padding: 8px 12px; font-size: 0.82rem; }
+
+  /* Photos default to a modest size, which on a narrow phone renders quite
+     small on-screen; trim the on-photo controls so they have room to sit
+     side by side instead of overlapping each other on small frames. */
+  .handle { width: 28px; height: 28px; font-size: 13px; }
+  .handle-delete { top: -14px; right: -14px; }
+  .handle-resize { bottom: -14px; right: -14px; }
+  .handle-ratio { top: -14px; left: -14px; height: 28px; padding: 0 9px; font-size: 0.68rem; }
+  .handle-pan { bottom: -14px; left: -14px; }
+  .zoom-pill { bottom: -16px; gap: 4px; }
+  .zoom-pill button { width: 26px; height: 26px; font-size: 15px; }
 }
