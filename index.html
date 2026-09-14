@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Postkarten Collagen Creator</title>
+<title>Postcard Collage Creator</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💌</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,38 +13,34 @@
 <body>
 <div id="app">
   <header class="app-header">
-    <h1>Postkarten Collagen Creator</h1>
-    <p class="subtitle">Jumbo-Format &middot; 23&nbsp;&times;&nbsp;12&nbsp;cm</p>
+    <h1>Postcard Collage Creator</h1>
+    <p class="subtitle">Jumbo Format &middot; 23&nbsp;&times;&nbsp;12&nbsp;cm</p>
   </header>
 
   <div class="toolbar">
     <label class="btn">
-      Hintergrund
+      Background
       <input type="file" id="bgInput" accept="image/*" hidden>
     </label>
     <label class="btn">
-      Foto hinzufügen
+      Add Photo
       <input type="file" id="photoInput" accept="image/*" hidden>
     </label>
-    <button type="button" id="addTextBtn" class="btn">Text hinzufügen</button>
-    <label class="btn toggle-btn">
-      <input type="checkbox" id="safeZoneToggle" checked>
-      Sicherheitsbereich
-    </label>
-    <button type="button" id="resetBtn" class="btn btn-secondary">Zurücksetzen</button>
-    <button type="button" id="exportBtn" class="btn btn-primary">Als PNG exportieren</button>
+    <button type="button" id="addTextBtn" class="btn">Add Text</button>
+    <button type="button" id="resetBtn" class="btn btn-secondary">Reset</button>
+    <button type="button" id="exportBtn" class="btn btn-primary">Export as PNG</button>
   </div>
 
   <div class="stage-wrapper">
     <div id="stage" class="stage">
       <div id="bgLayer" class="bg-layer"></div>
-      <div id="emptyHint" class="empty-hint">Klicke auf „Hintergrund“, um ein Bild auszuwählen</div>
+      <div id="emptyHint" class="empty-hint">Click &ldquo;Background&rdquo; to choose an image</div>
       <div id="layersContainer" class="layers-container"></div>
       <div id="safeZone" class="safe-zone"></div>
     </div>
   </div>
 
-  <p class="hint">Ziehen zum Verschieben &middot; Ecke ziehen zum Skalieren &middot; Foto: Pille oben links wechselt das Seitenverhältnis, ✋ unten links öffnet den Bildausschnitt zum Verschieben/Zoomen (Mausrad oder +/&minus;) &middot; Doppelklick auf Text zum Bearbeiten &middot; <kbd>Entf</kbd> löscht das ausgewählte Element &middot; die gestrichelte Linie zeigt den Sicherheitsbereich (Rand wird beim Druck ca. 6&nbsp;mm beschnitten)</p>
+  <p class="hint">Drag to move &middot; drag a corner to resize &middot; on a photo: the pill top-left switches the aspect ratio, ✋ bottom-left opens crop mode to pan/zoom (mouse wheel or +/&minus;) &middot; double-click text to edit it &middot; <kbd>Del</kbd> deletes the selected element &middot; the dotted line marks the safety area (about 6&nbsp;mm gets trimmed off the edge when printed)</p>
 </div>
 <script src="app.js"></script>
 </body>

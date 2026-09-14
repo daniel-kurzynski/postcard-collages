@@ -1,73 +1,69 @@
-# Postkarten Collagen Creator
+# Postcard Collage Creator
 
-Eine reine Frontend-Web-App zum Erstellen von Postkarten-Collagen (z. B. für
-Druckdienste wie Pokamax), komplett ohne Build-Schritt oder Backend – ideal
-für GitHub Pages.
+A pure frontend web app for creating postcard collages (e.g. for print
+services like POKAmax), with no build step and no backend — ideal for
+GitHub Pages.
 
 ## Format
 
-Die App verwendet aktuell ein einziges Design: das **Jumbo-Postkarten-Format**
-von POKAmax (23,0 × 12,0 cm, Lieferformat 2787 × 1488 px).
+The app currently supports a single design: the **POKAmax Jumbo postcard
+format** (23.0 × 12.0 cm, delivery size 2787 × 1488 px).
 
-Beim Druck wird am Rand standardmäßig ein Beschnitt von 35 px (ca. 6 mm)
-abgeschnitten. Im Editor markiert eine gestrichelte Linie diesen
-Sicherheitsbereich (lässt sich über den Button „Sicherheitsbereich“ ein-
-und ausblenden); wichtige Bildinhalte oder Text sollten nicht außerhalb
-davon platziert werden. Die Markierung ist nur eine Editor-Hilfslinie und
-erscheint nicht im exportierten PNG.
+Printing trims off a bleed of about 35 px (~6 mm) on every edge. The editor
+always shows a dotted guide marking this safety area; important photo
+content or text shouldn't be placed outside it. The guide is an editing aid
+only and is never drawn into the exported PNG.
 
-## Funktionen
+## Features
 
-- Hintergrundbild auswählen (füllt die gesamte Postkarte, Bildausschnitt wie
+- Choose a background image (fills the whole postcard, cropped like
   `background-size: cover`)
-- Beliebig viele Fotos hinzufügen, die in einem weißen Rahmen mit gleich
-  breitem Rand auf allen vier Seiten dargestellt werden
-- Seitenverhältnis des Bildausschnitts pro Foto umschalten (Pille oben links
-  am Foto: 2:3 bzw. 3:2)
-- Fotos per Ziehen verschieben, über die Ecke skalieren (Seitenverhältnis
-  des Rahmens bleibt erhalten) und löschen
-- Bildausschnitt anpassen: über den ✋-Button (oder Doppelklick auf das Foto)
-  in den Anpassungsmodus wechseln und das Bild im Rahmen verschieben
-  (ziehen) sowie zoomen (Mausrad oder die +/−-Buttons) – wichtig, da
-  hochgeladene Fotos meist ein anderes Seitenverhältnis haben als der Rahmen
-- Ein Textelement (z. B. „Viele Grüße aus …“) hinzufügen, frei positionieren,
-  per Doppelklick bearbeiten und in der Größe ändern – schwarze Schrift mit
-  dünnem weißen Rand
-- Export der fertigen Collage als PNG in voller Druckauflösung
+- Add any number of photos, shown in a white frame with an equal-width
+  border on all four sides
+- Switch a photo's inner crop aspect ratio (pill top-left on each photo:
+  2:3 or 3:2)
+- Drag photos to move them, drag the corner handle to resize (the frame's
+  own aspect ratio is preserved), and delete them
+- Adjust the crop: open the arrange mode via the ✋ handle (or double-click
+  the photo) and pan the image within the frame (drag) and zoom it (mouse
+  wheel or the +/− buttons) independently of moving/resizing the frame —
+  useful since uploaded photos rarely already match the frame's ratio
+- Add a text element (e.g. "Greetings from ..."), position it freely, edit
+  it via double-click, and resize it — black text with a thin white outline
+- Export the finished collage as a PNG at full print resolution
 
-## Lokal starten
+## Running locally
 
-Da es sich um eine reine statische Seite handelt, reicht ein beliebiger
-statischer Webserver, z. B.:
+Since this is a purely static site, any static web server works, e.g.:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Anschließend `http://localhost:8000` im Browser öffnen.
+Then open `http://localhost:8000` in a browser.
 
-## GitHub Pages einrichten
+## Setting up GitHub Pages
 
-1. Repository-Einstellungen öffnen: **Settings → Pages**
-2. Unter **Build and deployment** die Quelle **Deploy from a branch** wählen
-3. Branch auf den Branch mit diesem Code setzen (z. B. `main`) und als Ordner
-   **/ (root)** auswählen
-4. Speichern – die Seite ist danach unter der angezeigten GitHub-Pages-URL
-   erreichbar
+1. Open the repository settings: **Settings → Pages**
+2. Under **Build and deployment**, choose the source **Deploy from a
+   branch**
+3. Set the branch to the one containing this code (e.g. `main`) and the
+   folder to **/ (root)**
+4. Save — the site is then available at the shown GitHub Pages URL
 
-Es ist keine weitere Konfiguration (kein Build, kein Node/npm) nötig, da alle
-Dateien (`index.html`, `style.css`, `app.js`) direkt ausgeliefert werden.
+No further configuration (no build step, no Node/npm) is needed, since
+`index.html`, `style.css`, and `app.js` are served directly.
 
-## Struktur
+## Structure
 
 ```
-index.html   Grundgerüst & Toolbar
-style.css    Layout & Design
-app.js       Gesamte Editor-Logik (Zustand, Interaktion, PNG-Export)
+index.html   Page structure & toolbar
+style.css    Layout & styling
+app.js       All editor logic (state, interaction, PNG export)
 ```
 
-## Neue Designs hinzufügen (zukünftig)
+## Adding more designs (future)
 
-Der Code ist bewusst so gehalten, dass sich weitere Designs/Formate später
-ergänzen lassen (eigene Canvas-Maße, Rahmenstile etc.), aktuell ist jedoch
-nur das eine Jumbo-Design aktiv.
+The code is deliberately structured so more designs/formats could be added
+later (their own canvas size, frame style, etc.), but only the one Jumbo
+design is active right now.

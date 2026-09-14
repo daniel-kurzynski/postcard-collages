@@ -40,7 +40,6 @@
   const emptyHint = document.getElementById("emptyHint");
   const layersContainer = document.getElementById("layersContainer");
   const safeZone = document.getElementById("safeZone");
-  const safeZoneToggle = document.getElementById("safeZoneToggle");
   const bgInput = document.getElementById("bgInput");
   const photoInput = document.getElementById("photoInput");
   const addTextBtn = document.getElementById("addTextBtn");
@@ -138,18 +137,13 @@
     safeZone.style.top = m + "px";
     safeZone.style.right = m + "px";
     safeZone.style.bottom = m + "px";
-    safeZone.hidden = !safeZoneToggle.checked;
   }
-
-  safeZoneToggle.addEventListener("change", () => {
-    safeZone.hidden = !safeZoneToggle.checked;
-  });
 
   function buildHandles(layerEl, onDelete, onResizeStart) {
     const del = document.createElement("div");
     del.className = "handle handle-delete";
     del.textContent = "✕";
-    del.title = "Löschen";
+    del.title = "Delete";
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -160,7 +154,7 @@
     const resize = document.createElement("div");
     resize.className = "handle handle-resize";
     resize.textContent = "⤡";
-    resize.title = "Größe ändern";
+    resize.title = "Resize";
     resize.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       onResizeStart(e);
@@ -240,7 +234,7 @@
     const ratioBtn = document.createElement("div");
     ratioBtn.className = "handle handle-ratio";
     ratioBtn.textContent = `${p.ratioW}:${p.ratioH}`;
-    ratioBtn.title = "Seitenverhältnis wechseln";
+    ratioBtn.title = "Switch aspect ratio";
     ratioBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     ratioBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -251,7 +245,7 @@
     const panBtn = document.createElement("div");
     panBtn.className = "handle handle-pan";
     panBtn.textContent = "✋";
-    panBtn.title = "Bildausschnitt anpassen (verschieben/zoomen)";
+    panBtn.title = "Adjust crop (pan/zoom)";
     panBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     panBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -264,7 +258,7 @@
     const zoomOutBtn = document.createElement("button");
     zoomOutBtn.type = "button";
     zoomOutBtn.textContent = "−";
-    zoomOutBtn.title = "Verkleinern";
+    zoomOutBtn.title = "Zoom out";
     zoomOutBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     zoomOutBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -273,7 +267,7 @@
     const zoomInBtn = document.createElement("button");
     zoomInBtn.type = "button";
     zoomInBtn.textContent = "+";
-    zoomInBtn.title = "Vergrößern";
+    zoomInBtn.title = "Zoom in";
     zoomInBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     zoomInBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -617,7 +611,7 @@
     }
     state.text = {
       id: genId(),
-      content: "Viele Grüße aus ...",
+      content: "Greetings from ...",
       x: CANVAS_W * 0.5,
       y: CANVAS_H * 0.86,
       fontSize: 130,
@@ -627,7 +621,7 @@
   });
 
   resetBtn.addEventListener("click", () => {
-    if (!confirm("Wirklich alles zurücksetzen?")) return;
+    if (!confirm("Reset everything?")) return;
     state.background = null;
     state.photos = [];
     state.text = null;
@@ -685,7 +679,7 @@
 
   exportBtn.addEventListener("click", async () => {
     exportBtn.disabled = true;
-    exportBtn.textContent = "Exportiere …";
+    exportBtn.textContent = "Exporting…";
     try {
       await ensureFontsLoaded();
       const canvas = document.createElement("canvas");
@@ -727,7 +721,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "postkarte-jumbo.png";
+        a.download = "postcard-jumbo.png";
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -735,7 +729,7 @@
       }, "image/png");
     } finally {
       exportBtn.disabled = false;
-      exportBtn.textContent = "Als PNG exportieren";
+      exportBtn.textContent = "Export as PNG";
     }
   });
 
