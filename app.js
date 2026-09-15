@@ -65,6 +65,7 @@
   const exportLabel = document.getElementById("exportLabel");
   const emptyBgBtn = document.getElementById("emptyBgBtn");
   const helpBtn = document.getElementById("helpBtn");
+  const fullscreenBtn = document.getElementById("fullscreenBtn");
   const helpDialog = document.getElementById("helpDialog");
   const helpCloseBtn = document.getElementById("helpCloseBtn");
   const toastEl = document.getElementById("toast");
@@ -1104,6 +1105,33 @@
       exportLabel.textContent = "Export PNG";
     }
   });
+
+  // ---- Full screen ----
+
+  // On a phone in landscape the card is limited by the screen height, and
+  // the browser's own bars take a good slice of it; since this page never
+  // scrolls they don't slide away on their own either. Full screen (Android
+  // Chrome; iPhones don't allow it for pages) gives that height back.
+  if (document.fullscreenEnabled) {
+    fullscreenBtn.hidden = false;
+    fullscreenBtn.addEventListener("click", async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      } catch (err) {
+        showToast("Full screen is not available in this browser.", { error: true });
+      }
+    });
+    document.addEventListener("fullscreenchange", () => {
+      const on = Boolean(document.fullscreenElement);
+      fullscreenBtn.classList.toggle("active", on);
+      const title = on ? "Exit full screen" : "Full screen";
+      fullscreenBtn.title = title;
+      fullscreenBtn.setAttribute("aria-label", title);
+      fullscreenBtn.querySelector(".icon-label").textContent = on ? "Exit" : "Full screen";
+      relayout();
+    });
+  }
 
   // ---- Help ----
 

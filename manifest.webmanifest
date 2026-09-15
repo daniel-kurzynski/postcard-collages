@@ -1,0 +1,16 @@
+{
+  "name": "Postcard Collage Creator",
+  "short_name": "Postcards",
+  "description": "Arrange photos and a greeting on a POKAmax Jumbo postcard and export it as a print-ready PNG.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f1ea",
+  "theme_color": "#f4f1ea",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -57,6 +57,10 @@ only and is never drawn into the exported PNG.
   In portrait and on desktops the toolbar sits above the card; on phones
   held in landscape it becomes a narrow column of icon buttons at the right
   edge so the card can use the full screen height
+- On a phone the browser's own bars still cost card height, so there is a
+  full-screen button (Android; iPhones don't allow it for web pages), and
+  the app ships a web manifest so "Add to Home screen" installs it as an
+  app that always opens without browser bars
 
 ## Running locally
 
@@ -83,9 +87,10 @@ No further configuration (no build step, no Node/npm) is needed, since
 ## Structure
 
 ```
-index.html   Page structure, toolbar, SVG icon sprite, help dialog
-style.css    Layout & styling
-app.js       All editor logic (state, interaction, PNG export)
+index.html          Page structure, toolbar, SVG icon sprite, help dialog
+style.css           Layout & styling
+app.js              All editor logic (state, interaction, PNG export)
+manifest.webmanifest, icons/   Web app manifest for "Add to Home screen"
 ```
 
 ## Adding more designs (future)
