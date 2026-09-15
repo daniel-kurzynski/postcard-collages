@@ -40,37 +40,47 @@
   // This is a visual editing guide only and is never drawn into the export.
   const SAFE_MARGIN = 35;
 
+  // Background collage grid: the white gutter between two neighbouring
+  // cells, and the smallest width/height a cell can be split or dragged
+  // down to (both in canvas px; 36 px is about 3 mm).
+  const GUTTER = 36;
+  const MIN_CELL = 160;
+  // A press on a background cell that travels less than this (screen px)
+  // counts as a tap (select); anything further drags the cell's photo.
+  const TAP_SLOP = 6;
+
   // On-screen size of the card: at most this wide, and never so tall that it
   // pokes below the viewport (see fitStage), but not shrunk below the
   // minimum either; past that point the page simply scrolls.
   const STAGE_MAX_W = 1100;
   const STAGE_MIN_W = 320;
 
+  let nextId = 1;
+  const genId = () => "l" + nextId++;
+
   const state = {
-    background: null, // { img, src }
+    grid: null, // background cell tree, see "Background grid" below
     photos: [], // { id, img, src, x, y, w, h, ratioW, ratioH, imgScale, panX, panY, rotation, isPanning }
     text: null, // { id, content, x, y, fontSize }
-    selectedId: null,
+    selectedId: null, // selected photo/text layer
+    selectedCellId: null, // selected background cell (never both at once)
   };
 
   let scale = 1;
-  let nextId = 1;
-  const genId = () => "l" + nextId++;
 
   const app = document.getElementById("app");
   const stage = document.getElementById("stage");
   const stageWrapper = document.getElementById("stageWrapper");
   const bgLayer = document.getElementById("bgLayer");
-  const emptyHint = document.getElementById("emptyHint");
   const layersContainer = document.getElementById("layersContainer");
+  const cellControls = document.getElementById("cellControls");
   const safeZone = document.getElementById("safeZone");
-  const bgInput = document.getElementById("bgInput");
+  const cellInput = document.getElementById("cellInput");
   const photoInput = document.getElementById("photoInput");
   const addTextBtn = document.getElementById("addTextBtn");
   const resetBtn = document.getElementById("resetBtn");
   const exportBtn = document.getElementById("exportBtn");
   const exportLabel = document.getElementById("exportLabel");
-  const emptyBgBtn = document.getElementById("emptyBgBtn");
   const helpBtn = document.getElementById("helpBtn");
   const fullscreenBtn = document.getElementById("fullscreenBtn");
   const helpDialog = document.getElementById("helpDialog");
@@ -122,7 +132,7 @@
   }
 
   function hasContent() {
-    return Boolean(state.background || state.photos.length || state.text);
+    return Boolean(gridHasContent() || state.photos.length || state.text);
   }
 
   // Caps the card's width so its full height fits between the toolbar and
@@ -240,20 +250,399 @@
     };
   }
 
+  // ---- Background grid ----
+  //
+  // The card's background is a collage grid: a binary tree whose leaves are
+  // cells, each holding at most one photo (cropped to cover the cell, as the
+  // single background used to be), and whose inner nodes split their area
+  // in two, side by side ("col") or stacked ("row"), with a white gutter in
+  // between. `ratio` is the share of the space (minus the gutter) that the
+  // first child gets; dragging the gutter changes it. A fresh card is one
+  // empty cell covering everything, and since a cell can only ever be
+  // replaced by its sibling, there is always at least one.
+
+  function makeLeaf() {
+    return { type: "leaf", id: genId(), img: null, src: null, panX: 0.5, panY: 0.5, rect: null };
+  }
+
+  function makeSplit(dir, a, b) {
+    return { type: "split", id: genId(), dir, ratio: 0.5, a, b, rect: null };
+  }
+
+  const FULL_RECT = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+
+  // Smallest area the subtree fits in without any cell going below MIN_CELL.
+  function minSize(node) {
+    if (node.type === "leaf") return { w: MIN_CELL, h: MIN_CELL };
+    const a = minSize(node.a);
+    const b = minSize(node.b);
+    return node.dir === "col"
+      ? { w: a.w + GUTTER + b.w, h: Math.max(a.h, b.h) }
+      : { w: Math.max(a.w, b.w), h: a.h + GUTTER + b.h };
+  }
+
+  // The [lo, hi] range node.ratio may take so both children still fit in
+  // `rect`, or null if they can't both fit however the gutter is placed.
+  function ratioRange(node, rect) {
+    const along = node.dir === "col" ? "w" : "h";
+    const avail = rect[along] - GUTTER;
+    const lo = minSize(node.a)[along] / avail;
+    const hi = 1 - minSize(node.b)[along] / avail;
+    return lo <= hi ? [lo, hi] : null;
+  }
+
+  // Lays the tree out inside `rect`, storing each node's rect on it and
+  // calling the visitors (splits before their children, so the DOM order
+  // built from this puts gutters after the cells they separate). A ratio
+  // that stopped fitting because an ancestor shrank is pulled back into
+  // range on the way, so cells never drop below MIN_CELL while the whole
+  // subtree still fits at all.
+  function walkGrid(node, rect, visit = {}, parent = null) {
+    node.rect = rect;
+    if (node.type === "leaf") {
+      if (visit.leaf) visit.leaf(node, rect, parent);
+      return;
+    }
+    const range = ratioRange(node, rect);
+    if (range) node.ratio = clamp(node.ratio, range[0], range[1]);
+    if (visit.split) visit.split(node, rect, parent);
+    const { x, y, w, h } = rect;
+    if (node.dir === "col") {
+      const wa = (w - GUTTER) * node.ratio;
+      walkGrid(node.a, { x, y, w: wa, h }, visit, node);
+      walkGrid(node.b, { x: x + wa + GUTTER, y, w: w - GUTTER - wa, h }, visit, node);
+    } else {
+      const ha = (h - GUTTER) * node.ratio;
+      walkGrid(node.a, { x, y, w, h: ha }, visit, node);
+      walkGrid(node.b, { x, y: y + ha + GUTTER, w, h: h - GUTTER - ha }, visit, node);
+    }
+  }
+
+  function gridCells() {
+    const cells = [];
+    walkGrid(state.grid, FULL_RECT, { leaf: (cell) => cells.push(cell) });
+    return cells;
+  }
+
+  function gridHasContent() {
+    return state.grid.type === "split" || gridCells().some((cell) => cell.img);
+  }
+
+  function findNode(id, node = state.grid, parent = null) {
+    if (node.id === id) return { node, parent };
+    if (node.type === "leaf") return null;
+    return findNode(id, node.a, node) || findNode(id, node.b, node);
+  }
+
+  function replaceNode(parent, oldNode, newNode) {
+    if (!parent) state.grid = newNode;
+    else if (parent.a === oldNode) parent.a = newNode;
+    else parent.b = newNode;
+  }
+
+  function canSplit(cell, dir) {
+    const along = dir === "col" ? "w" : "h";
+    return Boolean(cell.rect) && (cell.rect[along] - GUTTER) / 2 >= MIN_CELL;
+  }
+
+  // Splits a cell in two equal halves; its photo stays in the first half
+  // and the second starts empty.
+  function splitCell(id, dir) {
+    const found = findNode(id);
+    if (!found || !canSplit(found.node, dir)) return;
+    replaceNode(found.parent, found.node, makeSplit(dir, found.node, makeLeaf()));
+    render();
+  }
+
+  // Removes a cell; its sibling takes over their parent's whole area. The
+  // root cell has no sibling and stays.
+  function removeCell(id) {
+    const found = findNode(id);
+    if (!found || !found.parent) return;
+    const { node, parent } = found;
+    const sibling = parent.a === node ? parent.b : parent.a;
+    const { parent: grandparent } = findNode(parent.id);
+    releaseImage(node);
+    replaceNode(grandparent, parent, sibling);
+    if (state.selectedCellId === id) state.selectedCellId = null;
+    render();
+  }
+
+  function setCellImage(cell, loaded) {
+    releaseImage(cell);
+    cell.img = loaded ? loaded.img : null;
+    cell.src = loaded ? loaded.src : null;
+    cell.panX = 0.5;
+    cell.panY = 0.5;
+    render();
+  }
+
+  // Selection mirrors the photo layers': classes are toggled in place so
+  // the element a gesture holds on to survives.
+  function selectCell(id) {
+    if (id) select(null);
+    if (state.selectedCellId === id) return;
+    closeRatioMenus();
+    state.selectedCellId = id;
+    updateCellClasses();
+  }
+
+  function updateCellClasses() {
+    cellEls.forEach((el, id) => el.classList.toggle("selected", id === state.selectedCellId));
+    pillEls.forEach((el, id) => el.classList.toggle("selected", id === state.selectedCellId));
+  }
+
+  let pendingCellId = null;
+  function pickCellPhoto(id) {
+    pendingCellId = id;
+    cellInput.click();
+  }
+
+  cellInput.addEventListener("change", async () => {
+    const file = cellInput.files[0];
+    // Clear before the (async) load so picking the same file again works
+    // even if this attempt fails.
+    cellInput.value = "";
+    const found = pendingCellId ? findNode(pendingCellId) : null;
+    pendingCellId = null;
+    if (!file || !found) return;
+    let loaded;
+    try {
+      loaded = await loadImageFile(file);
+    } catch (err) {
+      showToast(err.message, { error: true });
+      return;
+    }
+    setCellImage(found.node, loaded);
+  });
+
+  // The cells and gutters live in the background layer, underneath the
+  // photos; each cell's control pill lives in its own layer on top of them,
+  // so a photo lying across a cell can't cover its buttons.
+  const cellEls = new Map(); // cell id -> element in bgLayer
+  const dividerEls = new Map(); // split id -> gutter element in bgLayer
+  const pillEls = new Map(); // cell id -> pill element in cellControls
+
+  function buildBackground() {
+    bgLayer.innerHTML = "";
+    cellControls.innerHTML = "";
+    cellEls.clear();
+    dividerEls.clear();
+    pillEls.clear();
+    walkGrid(state.grid, FULL_RECT, {
+      leaf(cell, rect, parent) {
+        const el = buildCellEl(cell);
+        cellEls.set(cell.id, el);
+        bgLayer.appendChild(el);
+        const pill = buildCellPill(cell, Boolean(parent));
+        pillEls.set(cell.id, pill);
+        cellControls.appendChild(pill);
+      },
+      split(node) {
+        const el = buildDividerEl(node);
+        dividerEls.set(node.id, el);
+        bgLayer.appendChild(el);
+      },
+    });
+    updateCellClasses();
+    layoutBackground();
+  }
+
+  // Positions the existing cell, gutter and pill elements; used both after
+  // building them and whenever only geometry changed (gutter drag, resize).
+  function layoutBackground() {
+    walkGrid(state.grid, FULL_RECT, {
+      leaf(cell, rect) {
+        const el = cellEls.get(cell.id);
+        if (el) applyCellGeometry(cell, el);
+        const pill = pillEls.get(cell.id);
+        if (pill) {
+          pill.style.left = worldToScreen(rect.x + rect.w / 2) + "px";
+          pill.style.top = worldToScreen(rect.y + rect.h / 2) + "px";
+          pill.querySelector(".split-col").disabled = !canSplit(cell, "col");
+          pill.querySelector(".split-row").disabled = !canSplit(cell, "row");
+        }
+      },
+      split(node, rect) {
+        const el = dividerEls.get(node.id);
+        if (!el) return;
+        const g = worldToScreen(GUTTER);
+        if (node.dir === "col") {
+          el.style.left = worldToScreen(rect.x + (rect.w - GUTTER) * node.ratio) + "px";
+          el.style.top = worldToScreen(rect.y) + "px";
+          el.style.width = g + "px";
+          el.style.height = worldToScreen(rect.h) + "px";
+        } else {
+          el.style.left = worldToScreen(rect.x) + "px";
+          el.style.top = worldToScreen(rect.y + (rect.h - GUTTER) * node.ratio) + "px";
+          el.style.width = worldToScreen(rect.w) + "px";
+          el.style.height = g + "px";
+        }
+      },
+    });
+  }
+
+  function applyCellGeometry(cell, el) {
+    const r = cell.rect;
+    el.style.left = worldToScreen(r.x) + "px";
+    el.style.top = worldToScreen(r.y) + "px";
+    el.style.width = worldToScreen(r.w) + "px";
+    el.style.height = worldToScreen(r.h) + "px";
+    const img = el.querySelector("img");
+    if (!img) return;
+    const { drawnW, drawnH, offsetX, offsetY } = getCropGeometry(cell, r.w, r.h);
+    img.style.width = worldToScreen(drawnW) + "px";
+    img.style.height = worldToScreen(drawnH) + "px";
+    img.style.left = worldToScreen(-offsetX) + "px";
+    img.style.top = worldToScreen(-offsetY) + "px";
+  }
+
+  function buildCellEl(cell) {
+    const el = document.createElement("div");
+    el.className = "cell " + (cell.img ? "has-photo" : "empty");
+    el.dataset.cell = cell.id;
+    if (cell.img) {
+      const img = document.createElement("img");
+      img.src = cell.src;
+      img.draggable = false;
+      el.appendChild(img);
+    }
+    attachCellGestures(cell, el);
+    return el;
+  }
+
+  // A tap on a cell selects it (tapping the selected cell deselects); a
+  // drag moves the photo around within the cell, which is all the cropping
+  // a cell photo needs since it always covers its cell.
+  function attachCellGestures(cell, el) {
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeRatioMenus();
+      safeSetPointerCapture(el, e.pointerId);
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
+      const startPanX = cell.panX;
+      const startPanY = cell.panY;
+      let dragging = false;
+
+      function onMove(ev) {
+        if (ev.pointerId !== e.pointerId) return;
+        const dxs = ev.clientX - startClientX;
+        const dys = ev.clientY - startClientY;
+        if (!dragging) {
+          if (!cell.img || Math.hypot(dxs, dys) < TAP_SLOP) return;
+          dragging = true;
+          selectCell(cell.id);
+          el.classList.add("dragging");
+        }
+        const { rangeX, rangeY } = getCropGeometry(cell, cell.rect.w, cell.rect.h);
+        cell.panX = rangeX > 0 ? clamp(startPanX - screenToWorld(dxs) / rangeX, 0, 1) : 0.5;
+        cell.panY = rangeY > 0 ? clamp(startPanY - screenToWorld(dys) / rangeY, 0, 1) : 0.5;
+        applyCellGeometry(cell, el);
+      }
+      function onUp(ev) {
+        if (ev.pointerId !== e.pointerId) return;
+        safeReleasePointerCapture(el, ev.pointerId);
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onUp);
+        el.removeEventListener("pointercancel", onUp);
+        el.classList.remove("dragging");
+        if (!dragging && ev.type === "pointerup") {
+          selectCell(state.selectedCellId === cell.id ? null : cell.id);
+        }
+      }
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", onUp);
+      el.addEventListener("pointercancel", onUp);
+    });
+  }
+
+  // Empty cells always show their pill (that is how a photo gets in);
+  // filled cells only while selected (see CSS).
+  function buildCellPill(cell, removable) {
+    const pill = document.createElement("div");
+    pill.className = "pill cell-pill" + (cell.img ? "" : " empty");
+    pill.dataset.cell = cell.id;
+    pill.appendChild(
+      makePillButton(
+        iconSvg("image") + `<span>${cell.img ? "Replace" : "Choose photo"}</span>`,
+        cell.img ? "Replace this tile's photo" : "Choose a photo for this tile",
+        () => pickCellPhoto(cell.id),
+        "cell-photo"
+      )
+    );
+    pill.appendChild(
+      makePillButton(iconSvg("split-cols"), "Split into left and right", () => splitCell(cell.id, "col"), "split-col")
+    );
+    pill.appendChild(
+      makePillButton(iconSvg("split-rows"), "Split into top and bottom", () => splitCell(cell.id, "row"), "split-row")
+    );
+    if (removable) {
+      pill.appendChild(
+        makePillButton(iconSvg("x"), "Remove this tile (its neighbour takes the space)", () => removeCell(cell.id), "cell-remove")
+      );
+    }
+    return pill;
+  }
+
+  function buildDividerEl(node) {
+    const el = document.createElement("div");
+    el.className = "divider divider-" + node.dir;
+    el.dataset.split = node.id;
+    el.title = "Drag to resize the tiles";
+    el.innerHTML = '<span class="grip"></span>';
+    el.addEventListener("pointerdown", (e) => startDividerDrag(e, node, el));
+    return el;
+  }
+
+  // ---- Drag: move a gutter between two cells ----
+
+  function startDividerDrag(e, node, el) {
+    if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeRatioMenus();
+    safeSetPointerCapture(el, e.pointerId);
+    el.classList.add("dragging");
+    const stageRect = stage.getBoundingClientRect();
+
+    function onMove(ev) {
+      if (ev.pointerId !== e.pointerId) return;
+      const rect = node.rect;
+      const range = ratioRange(node, rect);
+      if (!range) return;
+      // The pointer sits in the middle of the gutter; work out where that
+      // puts the gutter's leading edge as a share of the splittable space.
+      const isCol = node.dir === "col";
+      const pos = isCol
+        ? screenToWorld(ev.clientX - stageRect.left) - rect.x
+        : screenToWorld(ev.clientY - stageRect.top) - rect.y;
+      const avail = (isCol ? rect.w : rect.h) - GUTTER;
+      node.ratio = clamp((pos - GUTTER / 2) / avail, range[0], range[1]);
+      layoutBackground();
+    }
+    function onUp(ev) {
+      if (ev.pointerId !== e.pointerId) return;
+      safeReleasePointerCapture(el, ev.pointerId);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+      el.classList.remove("dragging");
+    }
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  }
+
   // ---- Rendering ----
 
   function render() {
     fitStage();
     updateScale();
 
-    bgLayer.innerHTML = "";
-    if (state.background) {
-      const img = document.createElement("img");
-      img.src = state.background.src;
-      img.draggable = false;
-      bgLayer.appendChild(img);
-    }
-    emptyHint.style.display = state.background ? "none" : "flex";
+    buildBackground();
 
     layersContainer.innerHTML = "";
     state.photos.forEach((p) => layersContainer.appendChild(buildPhotoEl(p)));
@@ -278,6 +667,7 @@
     if (stage.classList.contains("editing-text")) return; // keyboard open
     fitStage();
     updateScale();
+    layoutBackground();
     state.photos.forEach((p) => {
       const el = getLayerEl(p.id);
       if (el) applyPhotoGeometry(p, el);
@@ -670,6 +1060,7 @@
   // reference to its DOM element and pointer capture) is never invalidated
   // by a selection change at the start of that same gesture.
   function select(id) {
+    if (id) selectCell(null);
     if (state.selectedId === id) return;
     closeRatioMenus();
     const prevId = state.selectedId;
@@ -706,9 +1097,12 @@
     render();
   }
 
+  // Cells and gutters stop propagation, so this only fires for the bare
+  // stage (e.g. the rounded corners) and the pass-through containers.
   stage.addEventListener("pointerdown", (e) => {
-    if (e.target === stage || e.target === bgLayer || e.target === layersContainer || e.target === emptyHint) {
+    if (e.target === stage || e.target === bgLayer || e.target === layersContainer || e.target === cellControls) {
       deselect();
+      selectCell(null);
     }
   });
 
@@ -730,8 +1124,22 @@
         panningPhoto.isPanning = false;
         const el = getLayerEl(panningPhoto.id);
         if (el) el.classList.remove("panning");
+      } else if (state.selectedCellId) {
+        selectCell(null);
       } else {
         deselect();
+      }
+      return;
+    }
+
+    if (state.selectedCellId) {
+      // Delete empties a tile first; on an already empty tile it removes it.
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        const found = findNode(state.selectedCellId);
+        if (!found) return;
+        if (found.node.img) setCellImage(found.node, null);
+        else removeCell(found.node.id);
       }
       return;
     }
@@ -911,24 +1319,6 @@
 
   // ---- Toolbar actions ----
 
-  bgInput.addEventListener("change", async () => {
-    const file = bgInput.files[0];
-    // Clear before the (async) load so picking the same file again works
-    // even if this attempt fails.
-    bgInput.value = "";
-    if (!file) return;
-    let loaded;
-    try {
-      loaded = await loadImageFile(file);
-    } catch (err) {
-      showToast(err.message, { error: true });
-      return;
-    }
-    releaseImage(state.background);
-    state.background = loaded;
-    render();
-  });
-
   // Preset spawn spots (fractions of the canvas) so newly added photos fan
   // out instead of landing almost exactly on top of the previous one.
   const PHOTO_SPAWN_SPOTS = [
@@ -983,8 +1373,6 @@
     if (failed.length) showToast(failed.join(" "), { error: true });
   });
 
-  emptyBgBtn.addEventListener("click", () => bgInput.click());
-
   addTextBtn.addEventListener("click", () => {
     if (state.text) {
       state.selectedId = state.text.id;
@@ -1005,34 +1393,17 @@
   resetBtn.addEventListener("click", () => {
     if (!hasContent()) return;
     if (!confirm("Reset everything? This clears the whole collage.")) return;
-    releaseImage(state.background);
+    gridCells().forEach(releaseImage);
     state.photos.forEach(releaseImage);
-    state.background = null;
+    state.grid = makeLeaf();
     state.photos = [];
     state.text = null;
     state.selectedId = null;
+    state.selectedCellId = null;
     render();
   });
 
   // ---- Export ----
-
-  function drawCover(ctx, img, dx, dy, dw, dh) {
-    const ir = img.width / img.height;
-    const dr = dw / dh;
-    let sx, sy, sw, sh;
-    if (ir > dr) {
-      sh = img.height;
-      sw = sh * dr;
-      sx = (img.width - sw) / 2;
-      sy = 0;
-    } else {
-      sw = img.width;
-      sh = sw / dr;
-      sx = 0;
-      sy = (img.height - sh) / 2;
-    }
-    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-  }
 
   function drawText(ctx, t) {
     const lines = t.content.split("\n");
@@ -1064,7 +1435,7 @@
 
   exportBtn.addEventListener("click", async () => {
     if (!hasContent()) {
-      showToast("Nothing to export yet. Add a background or some photos first.");
+      showToast("Nothing to export yet. Add a background photo or some photos first.");
       return;
     }
     exportBtn.disabled = true;
@@ -1078,9 +1449,20 @@
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      if (state.background) {
-        drawCover(ctx, state.background.img, 0, 0, CANVAS_W, CANVAS_H);
-      }
+      // Background grid: the white canvas already provides the gutters (and
+      // empty cells); each photo is clipped to its cell.
+      walkGrid(state.grid, FULL_RECT, {
+        leaf(cell, r) {
+          if (!cell.img) return;
+          const { drawnW, drawnH, offsetX, offsetY } = getCropGeometry(cell, r.w, r.h);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(r.x, r.y, r.w, r.h);
+          ctx.clip();
+          ctx.drawImage(cell.img, r.x - offsetX, r.y - offsetY, drawnW, drawnH);
+          ctx.restore();
+        },
+      });
 
       for (const p of state.photos) {
         const b = p.w * BORDER_RATIO;
@@ -1195,5 +1577,6 @@
     });
   });
 
+  state.grid = makeLeaf();
   render();
 })();

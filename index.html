@@ -37,6 +37,9 @@
     <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="18" y1="10" x2="18" y2="10"/><line x1="7" y1="14" x2="17" y2="14"/></symbol>
     <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></symbol>
+    <symbol id="i-split-cols" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></symbol>
+    <symbol id="i-split-rows" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></symbol>
+    <symbol id="i-divider" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="8 9 5 12 8 15"/><polyline points="16 9 19 12 16 15"/></symbol>
     <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></symbol>
   </defs>
 </svg>
@@ -50,11 +53,6 @@
 
   <div class="toolbar" role="toolbar" aria-label="Editor actions">
     <div class="toolbar-group">
-      <label class="btn">
-        <svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>
-        <span class="btn-label">Background</span>
-        <input type="file" id="bgInput" accept="image/*" hidden>
-      </label>
       <label class="btn">
         <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
         <span class="btn-label">Add photos</span>
@@ -89,20 +87,18 @@
 
   <div id="stageWrapper" class="stage-wrapper">
     <div id="stage" class="stage">
+      <!-- Background collage grid: cells and the white gutters between them. -->
       <div id="bgLayer" class="bg-layer"></div>
-      <div id="emptyHint" class="empty-hint">
-        <div class="empty-card">
-          <svg class="empty-icon" aria-hidden="true"><use href="#i-image"/></svg>
-          <p class="empty-title">Start with a background</p>
-          <p class="empty-text">Pick a photo that fills the whole card, then layer smaller photos and a greeting on top.</p>
-          <button type="button" id="emptyBgBtn" class="btn btn-primary">Choose background</button>
-        </div>
-      </div>
       <div id="layersContainer" class="layers-container"></div>
+      <!-- The cells' control pills, above the photos so they stay reachable. -->
+      <div id="cellControls" class="cell-controls"></div>
       <div id="safeZone" class="safe-zone" title="Safety area: anything outside is trimmed off in print"></div>
     </div>
   </div>
 </div>
+
+<!-- File picker for a background tile (opened from the tile's own button). -->
+<input type="file" id="cellInput" accept="image/*" hidden>
 
 <dialog id="helpDialog" class="help" aria-labelledby="helpTitle">
   <div class="help-inner">
@@ -113,6 +109,9 @@
       </button>
     </header>
     <ul class="help-list">
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>Background tiles</strong> The card background is made of tiles. Tap a tile to pick its photo, which fills the tile; drag inside a tile to move the photo around within it. <kbd>Del</kbd> empties a selected tile.</div></li>
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-split-cols"/></svg><svg class="icon" aria-hidden="true"><use href="#i-split-rows"/></svg></span><div><strong>Split</strong> Split a tile into left and right, or top and bottom, halves. Each half can be split again, as often as there is room. The <strong>&times;</strong> on a tile removes it and its neighbour takes over the space.</div></li>
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-divider"/></svg></span><div><strong>Borders</strong> Drag the white border between two tiles to change how the space is shared.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-move"/></svg></span><div><strong>Move</strong> Drag a photo or the text anywhere on the card.</div></li>
       <li><span class="help-glyph glyph-accent"><svg class="icon" aria-hidden="true"><use href="#i-resize"/></svg></span><div><strong>Resize</strong> Drag the corner handle at the bottom right.</div></li>
       <li><span class="help-glyph"><span class="help-ratio">2:3</span></span><div><strong>Aspect ratio</strong> Tap the pill at the top left of a photo and pick a crop ratio: 9:16, 2:3, 3:4, 1:1, 4:3, 3:2 or 16:9.</div></li>

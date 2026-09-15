@@ -21,8 +21,15 @@ only and is never drawn into the exported PNG.
 
 ## Features
 
-- Choose a background image (fills the whole postcard, cropped like
-  `background-size: cover`)
+- The background is a collage grid of tiles: tap a tile to choose its
+  photo (cropped to fill the tile, like `background-size: cover`; drag
+  inside the tile to move the photo around within it). A tile can be split
+  into left/right or top/bottom halves, and each half split again, as often
+  as there is room; the white border between two tiles can be dragged to
+  change how they share the space, and a tile can be removed again (its
+  neighbour takes over the space). A fresh card is a single tile covering
+  the whole postcard, so one full-bleed background photo is still the
+  simplest case
 - Add any number of photos (several at once via the file picker), shown in
   a white frame with an equal-width border on all four sides
 - Pick a photo's crop aspect ratio from the pill top-left on each photo:
@@ -45,8 +52,9 @@ only and is never drawn into the exported PNG.
   it via the pencil handle or a double-click, and resize it — black text
   with a thin white outline
 - Nudge the selected element with the arrow keys (Shift for bigger steps),
-  delete it with <kbd>Del</kbd>, and press <kbd>Esc</kbd> to leave crop mode
-  or deselect
+  delete it with <kbd>Del</kbd> (on a background tile: empties it, or
+  removes an already empty tile), and press <kbd>Esc</kbd> to leave crop
+  mode or deselect
 - Export the finished collage as a PNG at full print resolution
 - Feedback (failed image loads, export done) appears as a small toast at
   the bottom of the screen rather than in blocking dialogs

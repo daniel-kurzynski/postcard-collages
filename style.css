@@ -196,75 +196,120 @@ body {
   touch-action: auto;
 }
 
+/* ---- Background grid ---- */
+
+/* The layer itself is the white of the gutters; the cells leave gaps. */
 .bg-layer {
   position: absolute;
   inset: 0;
+  background: #fff;
 }
 
-.bg-layer img {
+.cell {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.cell.empty {
+  background: var(--stage-bg) repeating-conic-gradient(var(--stage-check) 0% 25%, var(--stage-bg) 0% 50%) 0 0 / 24px 24px;
+}
+
+.cell.has-photo { cursor: grab; }
+.cell.has-photo.dragging { cursor: grabbing; }
+
+.cell img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
   -webkit-user-drag: none;
 }
 
-/* ---- Empty state ---- */
-
-.empty-hint {
+/* Selection ring drawn inside the cell (an outline would hide under the
+   neighbouring cells), above the photo. */
+.cell.selected::after {
+  content: "";
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  border: 3px solid var(--accent);
+  pointer-events: none;
 }
 
-.empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* Gutter between two cells: transparent (the white is the layer's), with a
+   small grip as the hint that it can be dragged, and a hit area wider than
+   the gutter itself so it's easy to grab on a phone. */
+.divider {
+  position: absolute;
+  touch-action: none;
+  z-index: 2;
+}
+
+.divider-col { cursor: col-resize; }
+.divider-row { cursor: row-resize; }
+
+.divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 -8px;
+}
+.divider-row::before { inset: -8px 0; }
+
+.divider .grip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 28px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.divider-row .grip { width: 28px; height: 4px; }
+.divider:hover .grip,
+.divider.dragging .grip { background: var(--accent); }
+
+/* Each cell's buttons, centred on the cell, in a layer above the photos. */
+.cell-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pill.cell-pill {
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 8;
+}
+
+.cell-pill.empty,
+.cell-pill.selected { display: flex; }
+
+.pill .cell-photo {
+  width: auto;
+  padding: 0 10px 0 8px;
+  border-radius: 15px;
   gap: 6px;
-  text-align: center;
-  max-width: 360px;
-  padding: 26px 28px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
-}
-
-.empty-icon {
-  width: 34px;
-  height: 34px;
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  margin-bottom: 4px;
-}
-
-.empty-title {
-  margin: 0;
+  font-size: 0.74rem;
   font-weight: 600;
-  font-size: 1rem;
+  white-space: nowrap;
 }
 
-.empty-text {
-  margin: 0 0 10px;
-  color: var(--ink-soft);
-  font-size: 0.86rem;
-  line-height: 1.45;
+.pill button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
+.pill button:disabled:hover { background: transparent; }
 
 /* ---- Layers ---- */
 
+/* The container spans the whole card but must not swallow taps meant for
+   the background cells underneath; only the layers themselves are targets. */
 .layers-container {
   position: absolute;
   inset: 0;
+  pointer-events: none;
 }
 
 .safe-zone {
@@ -276,6 +321,7 @@ body {
 
 .layer {
   position: absolute;
+  pointer-events: auto;
   touch-action: none;
   cursor: grab;
   /* Tilted photos rotate about their centre; the export uses the same pivot. */
@@ -625,7 +671,6 @@ kbd {
     --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.45);
   }
   .btn:hover { background: #33302b; border-color: #56503f; }
-  .empty-card { background: rgba(42, 39, 35, 0.8); }
   .toast { background: #3a352f; }
   .toast.error { background: var(--danger); }
 }
@@ -688,7 +733,7 @@ kbd {
 }
 
 /* Very short landscape screens (a phone with the browser bar still showing):
-   seven labelled buttons don't fit in the column, so it becomes icon-only. */
+   six labelled buttons don't fit in the column, so it becomes icon-only. */
 @media (orientation: landscape) and (max-height: 400px) {
   .btn-label, .icon-label { display: none; }
   .btn, .btn-icon { width: 42px; height: 38px; padding: 0; gap: 0; }
@@ -700,12 +745,6 @@ kbd {
 
 @media (max-width: 600px) {
   #app { padding-top: 16px; gap: 14px; }
-  /* The card is only ~190px tall here; keep the empty state to the essentials. */
-  .empty-card { padding: 12px 16px; gap: 3px; }
-  .empty-icon { width: 24px; height: 24px; margin-bottom: 0; }
-  .empty-title { font-size: 0.92rem; }
-  .empty-text { display: none; }
-  .empty-card .btn { margin-top: 6px; }
   .app-header h1 { font-size: 1.25rem; }
   .toolbar { justify-content: center; }
   .toolbar-group { justify-content: center; }
@@ -732,6 +771,11 @@ kbd {
   .pill button { width: 26px; height: 26px; }
   .pill button .icon { width: 14px; height: 14px; }
   .pill .tilt-label { min-width: 32px; font-size: 0.66rem; }
+  /* Tiles are small on a phone; keep their pills compact and centred. */
+  .pill.cell-pill { bottom: auto; }
+  .pill .cell-photo { padding: 0 8px 0 6px; font-size: 0.66rem; gap: 4px; }
+  .divider .grip { height: 20px; }
+  .divider-row .grip { width: 20px; height: 4px; }
   .help-list { padding: 6px 16px 14px; }
   .help-header { padding-left: 16px; }
 }
