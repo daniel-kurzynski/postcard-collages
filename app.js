@@ -33,6 +33,12 @@
   // This is a visual editing guide only and is never drawn into the export.
   const SAFE_MARGIN = 35;
 
+  // On-screen size of the card: at most this wide, and never so tall that it
+  // pokes below the viewport (see fitStage), but not shrunk below the
+  // minimum either; past that point the page simply scrolls.
+  const STAGE_MAX_W = 1100;
+  const STAGE_MIN_W = 320;
+
   const state = {
     background: null, // { img, src }
     photos: [], // { id, img, src, x, y, w, h, ratioW, ratioH, imgScale, panX, panY, rotation, isPanning }
@@ -44,7 +50,9 @@
   let nextId = 1;
   const genId = () => "l" + nextId++;
 
+  const app = document.getElementById("app");
   const stage = document.getElementById("stage");
+  const stageWrapper = document.getElementById("stageWrapper");
   const bgLayer = document.getElementById("bgLayer");
   const emptyHint = document.getElementById("emptyHint");
   const layersContainer = document.getElementById("layersContainer");
@@ -107,6 +115,23 @@
 
   function hasContent() {
     return Boolean(state.background || state.photos.length || state.text);
+  }
+
+  // Caps the card's width so its full height fits between the toolbar and
+  // the bottom of the viewport. Matters most on phones held in landscape,
+  // where a full-width card is taller than the screen and the only place
+  // left to scroll is the margin beside it (the card itself swallows touch
+  // gestures for dragging). Any spare width ends up as side margin.
+  function fitStage() {
+    const docTop = stageWrapper.getBoundingClientRect().top + window.scrollY;
+    // Whatever the page reserves below the card (its own bottom padding and
+    // the phone's safe-area inset) also has to fit in the viewport.
+    const below =
+      parseFloat(getComputedStyle(app).paddingBottom) +
+      parseFloat(getComputedStyle(document.documentElement).paddingBottom);
+    const availH = window.innerHeight - docTop - below;
+    const fitW = availH * (CANVAS_W / CANVAS_H);
+    stage.style.maxWidth = clamp(fitW, STAGE_MIN_W, STAGE_MAX_W) + "px";
   }
 
   function updateScale() {
@@ -210,6 +235,7 @@
   // ---- Rendering ----
 
   function render() {
+    fitStage();
     updateScale();
 
     bgLayer.innerHTML = "";
@@ -224,12 +250,35 @@
     layersContainer.innerHTML = "";
     state.photos.forEach((p) => layersContainer.appendChild(buildPhotoEl(p)));
     if (state.text) layersContainer.appendChild(buildTextEl(state.text));
+    applySafeZone();
+  }
 
+  function applySafeZone() {
     const m = worldToScreen(SAFE_MARGIN);
     safeZone.style.left = m + "px";
     safeZone.style.top = m + "px";
     safeZone.style.right = m + "px";
     safeZone.style.bottom = m + "px";
+  }
+
+  // Re-fits the card and repositions the existing layer elements after the
+  // viewport changed, without rebuilding them. Rebuilding would cut off an
+  // in-progress drag (whose element and pointer capture would vanish) and
+  // throw away a text edit, and on phones the browser fires resize for
+  // things as mundane as the address bar sliding away.
+  function relayout() {
+    if (stage.classList.contains("editing-text")) return; // keyboard open
+    fitStage();
+    updateScale();
+    state.photos.forEach((p) => {
+      const el = getLayerEl(p.id);
+      if (el) applyPhotoGeometry(p, el);
+    });
+    if (state.text) {
+      const el = getLayerEl(state.text.id);
+      if (el) applyTextGeometry(state.text, el);
+    }
+    applySafeZone();
   }
 
   function makeHandle(className, html, title) {
@@ -494,9 +543,7 @@
     el.className =
       "layer text-layer" + (state.selectedId === t.id ? " selected" : "");
     el.dataset.id = t.id;
-    applyLayerPosition(t, el);
-    el.style.fontSize = worldToScreen(t.fontSize) + "px";
-    el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
+    applyTextGeometry(t, el);
 
     // The editable text lives in its own child element, separate from the
     // delete/resize handles below. Handles are also children of `el` (for
@@ -535,6 +582,12 @@
     });
     el.appendChild(editBtn);
     return el;
+  }
+
+  function applyTextGeometry(t, el) {
+    applyLayerPosition(t, el);
+    el.style.fontSize = worldToScreen(t.fontSize) + "px";
+    el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
   }
 
   function startEditingText(el, textContent, t) {
@@ -810,8 +863,7 @@
       const dist = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
       const factor = dist / startDist;
       t.fontSize = clamp(startFont * factor, MIN_FONT_SIZE, MAX_FONT_SIZE);
-      el.style.fontSize = worldToScreen(t.fontSize) + "px";
-      el.style.webkitTextStrokeWidth = worldToScreen(t.fontSize * 0.08) + "px";
+      applyTextGeometry(t, el);
     }
     function onUp(ev) {
       if (ev.pointerId !== e.pointerId) return;
@@ -1080,7 +1132,7 @@
     if (resizeRaf) return;
     resizeRaf = requestAnimationFrame(() => {
       resizeRaf = null;
-      render();
+      relayout();
     });
   });
 

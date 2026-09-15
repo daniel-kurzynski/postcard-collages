@@ -53,6 +53,9 @@ only and is never drawn into the exported PNG.
 - The page warns before it is closed or reloaded while a collage is in
   progress, since nothing is saved anywhere
 - Light and dark colour schemes follow the system setting
+- The card is scaled so that it always fits below the toolbar without
+  scrolling, on desktops as well as on phones held in landscape; any spare
+  width becomes margin at the sides
 
 ## Running locally
 

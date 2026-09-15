@@ -37,7 +37,7 @@ body {
 #app {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 16px 40px;
+  padding: 24px 16px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -58,6 +58,13 @@ body {
 }
 
 /* ---- Header ---- */
+
+/* Header and toolbar are laid out as ordinary children of #app; on short
+   (landscape phone) screens the media query below turns .top into a single
+   row so the card gets as much height as possible. */
+.top {
+  display: contents;
+}
 
 .app-header {
   text-align: center;
@@ -158,6 +165,9 @@ body {
 
 .stage {
   position: relative;
+  /* app.js additionally caps the width (inline max-width) so the whole card
+     fits below the toolbar without scrolling; leftover space goes to the
+     sides, which is also where touch-scrolling still works. */
   width: min(1100px, 100%);
   aspect-ratio: 2787 / 1488;
   background: var(--stage-bg) repeating-conic-gradient(var(--stage-check) 0% 25%, var(--stage-bg) 0% 50%) 0 0 / 24px 24px;
@@ -583,6 +593,35 @@ kbd {
   .empty-card { background: rgba(42, 39, 35, 0.8); }
   .toast { background: #3a352f; }
   .toast.error { background: var(--danger); }
+}
+
+/* ---- Short screens (phones in landscape) ---- */
+
+@media (max-height: 520px) {
+  #app { padding: 10px 12px 12px; gap: 10px; }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    width: min(1100px, 100%);
+  }
+  .app-header { text-align: left; }
+  .app-header h1 { font-size: 1.05rem; margin: 0; white-space: nowrap; }
+  .subtitle { display: none; }
+  .toolbar { width: auto; flex: 1; justify-content: flex-end; gap: 8px; }
+  .toolbar-group { gap: 6px; }
+  .btn { padding: 7px 10px; font-size: 0.82rem; gap: 5px; }
+  .btn-icon { padding: 7px; }
+  .icon { width: 16px; height: 16px; }
+}
+
+/* Short and narrow (small phones in landscape): the title would push the
+   toolbar onto a second row and cost the card height it needs. */
+@media (max-height: 520px) and (max-width: 720px) {
+  .app-header { display: none; }
+  .toolbar { justify-content: center; }
 }
 
 /* ---- Small screens ---- */
