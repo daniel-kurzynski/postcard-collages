@@ -9,15 +9,27 @@ work for anyone else's use case. Feel free to look around anyway.
 Technically it is a pure frontend web app with no build step and no
 backend, so it can be hosted straight from GitHub Pages.
 
-## Format
+## Formats
 
-The app currently supports a single design: the **POKAmax Jumbo postcard
-format** (23.0 × 12.0 cm, delivery size 2787 × 1488 px).
+The **Format** button (or the format line under the title) switches the
+card between these formats, each in landscape or portrait:
 
-Printing trims off a bleed of about 35 px (~6 mm) on every edge. The editor
-always shows a dotted guide marking this safety area; important photo
-content or text shouldn't be placed outside it. The guide is an editing aid
-only and is never drawn into the exported PNG.
+| Format | Use | Export size (landscape) |
+| --- | --- | --- |
+| POKAmax Jumbo | postcard, 23.0 × 12.0 cm | 2787 × 1488 px |
+| 10 × 15 cm | photo print (4 × 6″), 300 dpi | 1800 × 1200 px |
+| 13 × 18 cm | photo print (5 × 7″), 300 dpi | 2100 × 1500 px |
+| 16:9 | panorama print, e.g. 10 × 18 cm | 2560 × 1440 px |
+
+Switching keeps the collage: the background tiles are all ratios and simply
+re-flow, and photos and text are scaled to stay roughly where they were.
+The last choice is remembered in the browser.
+
+Printing trims off a bleed on every edge (about 35 px ≈ 6 mm on the
+POKAmax card, ~30 px on the photo prints). The editor always shows a dotted
+guide marking this safety area; important photo content or text shouldn't
+be placed outside it. The guide is an editing aid only and is never drawn
+into the exported PNG.
 
 ## Features
 
@@ -55,7 +67,8 @@ only and is never drawn into the exported PNG.
   delete it with <kbd>Del</kbd> (on a background tile: empties it, or
   removes an already empty tile), and press <kbd>Esc</kbd> to leave crop
   mode or deselect
-- Export the finished collage as a PNG at full print resolution
+- Export the finished collage as a PNG at full print resolution (the file
+  name carries the format and orientation)
 - Feedback (failed image loads, export done) appears as a small toast at
   the bottom of the screen rather than in blocking dialogs
 - The page warns before it is closed or reloaded while a collage is in
@@ -101,8 +114,8 @@ app.js              All editor logic (state, interaction, PNG export)
 manifest.webmanifest, icons/   Web app manifest for "Add to Home screen"
 ```
 
-## Adding more designs (future)
+## Adding more formats
 
-The code is deliberately structured so more designs/formats could be added
-later (their own canvas size, frame style, etc.), but only the one Jumbo
-design is active right now.
+Formats are the `FORMATS` table at the top of `app.js`: an id, a name and
+description for the picker, the landscape pixel size, and the safety
+margin. Adding a row is all it takes.

@@ -1,7 +1,7 @@
 {
   "name": "Postcard Collage Creator",
   "short_name": "Postcards",
-  "description": "Arrange photos and a greeting on a POKAmax Jumbo postcard and export it as a print-ready PNG.",
+  "description": "Arrange photos and a greeting on a postcard or photo print and export it as a print-ready PNG.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

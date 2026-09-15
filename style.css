@@ -80,15 +80,24 @@ body {
 }
 
 .subtitle {
+  appearance: none;
+  border: none;
+  background: none;
   margin: 0;
+  padding: 2px 6px;
+  border-radius: 8px;
   color: var(--ink-soft);
+  font: inherit;
   font-size: 0.88rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+  cursor: pointer;
 }
+.subtitle:hover { background: var(--accent-soft); }
+.subtitle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .badge {
   display: inline-block;
@@ -179,7 +188,7 @@ body {
      fits below the toolbar without scrolling; leftover space goes to the
      sides, which is also where touch-scrolling still works. */
   width: min(1100px, 100%);
-  aspect-ratio: 2787 / 1488;
+  aspect-ratio: 2787 / 1488; /* overwritten inline by app.js per format */
   background: var(--stage-bg) repeating-conic-gradient(var(--stage-check) 0% 25%, var(--stage-bg) 0% 50%) 0 0 / 24px 24px;
   overflow: hidden;
   border-radius: 8px;
@@ -628,6 +637,91 @@ kbd {
   color: var(--ink);
 }
 
+/* ---- Format dialog ---- */
+
+.format-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 22px 20px;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* On a short screen the body scrolls; its rows must not be squashed instead. */
+.format-body > * { flex: none; }
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.segmented .seg {
+  appearance: none;
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.segmented .seg + .seg { border-left: 1px solid var(--border); }
+.segmented .seg.current {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.segmented .seg:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.format-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.format-option {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 10px 14px;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+}
+.format-option:hover { border-color: #cfc6b6; background: var(--bg); }
+.format-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.format-option.current {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.format-option strong { font-weight: 600; font-size: 0.95rem; }
+.format-option span { color: var(--ink-soft); font-size: 0.82rem; }
+
+.format-note {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 /* ---- Toast ---- */
 
 .toast {
@@ -701,7 +795,9 @@ kbd {
     flex: 1;
     min-width: 0;
     width: auto;
-    align-items: center;
+    /* "safe": a card taller than the screen (portrait on a landscape phone)
+       is top-aligned and scrollable instead of centred with its top cut off. */
+    align-items: safe center;
   }
   .toolbar {
     width: auto;
@@ -733,7 +829,7 @@ kbd {
 }
 
 /* Very short landscape screens (a phone with the browser bar still showing):
-   six labelled buttons don't fit in the column, so it becomes icon-only. */
+   seven labelled buttons don't fit in the column, so it becomes icon-only. */
 @media (orientation: landscape) and (max-height: 400px) {
   .btn-label, .icon-label { display: none; }
   .btn, .btn-icon { width: 42px; height: 38px; padding: 0; gap: 0; }
@@ -777,5 +873,6 @@ kbd {
   .divider .grip { height: 20px; }
   .divider-row .grip { width: 20px; height: 4px; }
   .help-list { padding: 6px 16px 14px; }
+  .format-body { padding: 12px 16px 16px; }
   .help-header { padding-left: 16px; }
 }

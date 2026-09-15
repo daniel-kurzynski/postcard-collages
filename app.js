@@ -1,9 +1,23 @@
 (() => {
   "use strict";
 
-  // Jumbo postcard (Pokamax): 23.0 x 12.0 cm @ ~307 dpi
-  const CANVAS_W = 2787;
-  const CANVAS_H = 1488;
+  // Card formats. Pixel sizes are the landscape orientation (portrait
+  // swaps them); `safe` is the margin (canvas px) the print may trim off
+  // each edge, shown as the dotted guide. The POKAmax postcard is delivered
+  // at exactly its size; the photo prints are common lab sizes at 300 dpi
+  // (10 x 15 is 4 x 6", 13 x 18 is 5 x 7"), which labs scale to fit.
+  const FORMATS = [
+    { id: "pokamax-jumbo", name: "POKAmax Jumbo", detail: "postcard, 23 × 12 cm", w: 2787, h: 1488, safe: 35 },
+    { id: "10x15", name: "10 × 15 cm", detail: "photo print, 4 × 6″", w: 1800, h: 1200, safe: 30 },
+    { id: "13x18", name: "13 × 18 cm", detail: "photo print, 5 × 7″", w: 2100, h: 1500, safe: 30 },
+    { id: "16x9", name: "16:9", detail: "panorama print, e.g. 10 × 18 cm", w: 2560, h: 1440, safe: 30 },
+  ];
+  const FORMAT_STORAGE_KEY = "postcard-collages.format";
+
+  // Current canvas size in px; set by applyFormat() before the first render.
+  let CANVAS_W = FORMATS[0].w;
+  let CANVAS_H = FORMATS[0].h;
+  let SAFE_MARGIN = FORMATS[0].safe;
 
   // Photo frame: white border, equal thickness on all four sides, sized as
   // a fraction of the frame's own outer width (so it scales with the frame).
@@ -36,10 +50,6 @@
   const NUDGE_STEP = 10;
   const NUDGE_STEP_LARGE = 50;
 
-  // POKAmax cuts ~35px (~6mm) off every edge in production ("Beschnitt").
-  // This is a visual editing guide only and is never drawn into the export.
-  const SAFE_MARGIN = 35;
-
   // Background collage grid: the white gutter between two neighbouring
   // cells, and the smallest width/height a cell can be split or dragged
   // down to (both in canvas px; 36 px is about 3 mm).
@@ -50,8 +60,8 @@
   const TAP_SLOP = 6;
 
   // On-screen size of the card: at most this wide, and never so tall that it
-  // pokes below the viewport (see fitStage), but not shrunk below the
-  // minimum either; past that point the page simply scrolls.
+  // pokes below the viewport (see fitStage), but its longer side is not
+  // shrunk below the minimum either; past that point the page simply scrolls.
   const STAGE_MAX_W = 1100;
   const STAGE_MIN_W = 320;
 
@@ -64,6 +74,8 @@
     text: null, // { id, content, x, y, fontSize }
     selectedId: null, // selected photo/text layer
     selectedCellId: null, // selected background cell (never both at once)
+    formatId: FORMATS[0].id,
+    portrait: false,
   };
 
   let scale = 1;
@@ -82,6 +94,14 @@
   const exportBtn = document.getElementById("exportBtn");
   const exportLabel = document.getElementById("exportLabel");
   const helpBtn = document.getElementById("helpBtn");
+  const formatBtn = document.getElementById("formatBtn");
+  const formatSubtitle = document.getElementById("formatSubtitle");
+  const formatBadge = document.getElementById("formatBadge");
+  const formatDetail = document.getElementById("formatDetail");
+  const formatDialog = document.getElementById("formatDialog");
+  const formatCloseBtn = document.getElementById("formatCloseBtn");
+  const formatList = document.getElementById("formatList");
+  const orientationBtns = [...document.querySelectorAll("[data-orientation]")];
   const fullscreenBtn = document.getElementById("fullscreenBtn");
   const helpDialog = document.getElementById("helpDialog");
   const helpCloseBtn = document.getElementById("helpCloseBtn");
@@ -149,7 +169,10 @@
       parseFloat(getComputedStyle(document.documentElement).paddingBottom);
     const availH = window.innerHeight - docTop - below;
     const fitW = availH * (CANVAS_W / CANVAS_H);
-    stage.style.maxWidth = clamp(fitW, STAGE_MIN_W, STAGE_MAX_W) + "px";
+    // The minimum applies to the card's longer side, so a portrait card is
+    // allowed to be narrower than a landscape one instead of far taller.
+    const minW = CANVAS_W >= CANVAS_H ? STAGE_MIN_W : (STAGE_MIN_W * CANVAS_W) / CANVAS_H;
+    stage.style.maxWidth = clamp(fitW, minW, STAGE_MAX_W) + "px";
   }
 
   function updateScale() {
@@ -269,7 +292,9 @@
     return { type: "split", id: genId(), dir, ratio: 0.5, a, b, rect: null };
   }
 
-  const FULL_RECT = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+  function fullRect() {
+    return { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+  }
 
   // Smallest area the subtree fits in without any cell going below MIN_CELL.
   function minSize(node) {
@@ -320,7 +345,7 @@
 
   function gridCells() {
     const cells = [];
-    walkGrid(state.grid, FULL_RECT, { leaf: (cell) => cells.push(cell) });
+    walkGrid(state.grid, fullRect(), { leaf: (cell) => cells.push(cell) });
     return cells;
   }
 
@@ -429,7 +454,7 @@
     cellEls.clear();
     dividerEls.clear();
     pillEls.clear();
-    walkGrid(state.grid, FULL_RECT, {
+    walkGrid(state.grid, fullRect(), {
       leaf(cell, rect, parent) {
         const el = buildCellEl(cell);
         cellEls.set(cell.id, el);
@@ -451,7 +476,7 @@
   // Positions the existing cell, gutter and pill elements; used both after
   // building them and whenever only geometry changed (gutter drag, resize).
   function layoutBackground() {
-    walkGrid(state.grid, FULL_RECT, {
+    walkGrid(state.grid, fullRect(), {
       leaf(cell, rect) {
         const el = cellEls.get(cell.id);
         if (el) applyCellGeometry(cell, el);
@@ -1114,7 +1139,7 @@
   };
 
   window.addEventListener("keydown", (e) => {
-    if (helpDialog.open) return;
+    if (helpDialog.open || formatDialog.open) return;
     const active = document.activeElement;
     if (active && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
 
@@ -1331,10 +1356,10 @@
 
   function addPhoto({ img, src }) {
     const count = state.photos.length;
-    const w = CANVAS_W * 0.22;
+    const w = Math.min(CANVAS_W, CANVAS_H) * 0.41;
     const [fx, fy] = PHOTO_SPAWN_SPOTS[count % PHOTO_SPAWN_SPOTS.length];
     const extraCycles = Math.floor(count / PHOTO_SPAWN_SPOTS.length);
-    const jitter = extraCycles * CANVAS_W * 0.03;
+    const jitter = extraCycles * Math.min(CANVAS_W, CANVAS_H) * 0.05;
     const ratioW = DEFAULT_RATIO.w;
     const ratioH = DEFAULT_RATIO.h;
     const layer = {
@@ -1384,7 +1409,7 @@
       content: "Greetings from ...",
       x: CANVAS_W * 0.5,
       y: CANVAS_H * 0.86,
-      fontSize: 130,
+      fontSize: Math.min(CANVAS_W, CANVAS_H) * 0.087,
     };
     state.selectedId = state.text.id;
     render();
@@ -1451,7 +1476,7 @@
 
       // Background grid: the white canvas already provides the gutters (and
       // empty cells); each photo is clipped to its cell.
-      walkGrid(state.grid, FULL_RECT, {
+      walkGrid(state.grid, fullRect(), {
         leaf(cell, r) {
           if (!cell.img) return;
           const { drawnW, drawnH, offsetX, offsetY } = getCropGeometry(cell, r.w, r.h);
@@ -1505,12 +1530,13 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "postcard-jumbo.png";
+      const fileName = exportFileName();
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      showToast("Exported postcard-jumbo.png at full print size.");
+      showToast(`Exported ${fileName} at full print size.`);
     } catch (err) {
       showToast("Export failed: " + (err && err.message ? err.message : err), { error: true });
     } finally {
@@ -1546,6 +1572,117 @@
     });
   }
 
+  // ---- Card format ----
+
+  function currentFormat() {
+    return FORMATS.find((f) => f.id === state.formatId) || FORMATS[0];
+  }
+
+  function exportFileName() {
+    return `collage-${state.formatId}-${state.portrait ? "portrait" : "landscape"}.png`;
+  }
+
+  // Switches the canvas to a format/orientation. The background grid is
+  // all ratios, so it simply re-flows; photos and the text are scaled to
+  // stay roughly where they were on the card (positions follow each axis,
+  // sizes the smaller of the two factors so nothing balloons).
+  function applyFormat(formatId, portrait) {
+    const format = FORMATS.find((f) => f.id === formatId) || FORMATS[0];
+    const oldW = CANVAS_W;
+    const oldH = CANVAS_H;
+    state.formatId = format.id;
+    state.portrait = Boolean(portrait);
+    CANVAS_W = state.portrait ? format.h : format.w;
+    CANVAS_H = state.portrait ? format.w : format.h;
+    SAFE_MARGIN = format.safe;
+
+    const fx = CANVAS_W / oldW;
+    const fy = CANVAS_H / oldH;
+    const fs = Math.min(fx, fy);
+    if (fx !== 1 || fy !== 1) {
+      state.photos.forEach((p) => {
+        p.x *= fx;
+        p.y *= fy;
+        p.w = Math.max(MIN_PHOTO_W, p.w * fs);
+        p.h = outerHeightFor(p.w, p.ratioW, p.ratioH);
+      });
+      if (state.text) {
+        state.text.x *= fx;
+        state.text.y *= fy;
+        state.text.fontSize = clamp(state.text.fontSize * fs, MIN_FONT_SIZE, MAX_FONT_SIZE);
+      }
+    }
+
+    stage.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
+    formatBadge.textContent = format.name;
+    formatDetail.textContent = `${format.detail} · ${CANVAS_W} × ${CANVAS_H} px · ${state.portrait ? "portrait" : "landscape"}`;
+    orientationBtns.forEach((b) => {
+      const on = (b.dataset.orientation === "portrait") === state.portrait;
+      b.classList.toggle("current", on);
+      b.setAttribute("aria-checked", String(on));
+    });
+    formatList.querySelectorAll("[data-format]").forEach((b) => {
+      b.classList.toggle("current", b.dataset.format === format.id);
+    });
+    try {
+      localStorage.setItem(FORMAT_STORAGE_KEY, JSON.stringify({ id: format.id, portrait: state.portrait }));
+    } catch (err) {
+      /* private mode etc.; the choice just isn't remembered */
+    }
+  }
+
+  function buildFormatList() {
+    formatList.innerHTML = "";
+    FORMATS.forEach((f) => {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "format-option";
+      btn.dataset.format = f.id;
+      btn.setAttribute("role", "radio");
+      btn.innerHTML = `<strong>${f.name}</strong><span>${f.detail} · ${f.w} × ${f.h} px</span>`;
+      btn.addEventListener("click", () => {
+        applyFormat(f.id, state.portrait);
+        render();
+        formatDialog.close();
+      });
+      li.appendChild(btn);
+      formatList.appendChild(li);
+    });
+  }
+
+  orientationBtns.forEach((b) => {
+    b.addEventListener("click", () => {
+      const portrait = b.dataset.orientation === "portrait";
+      if (portrait === state.portrait) return;
+      applyFormat(state.formatId, portrait);
+      render();
+    });
+  });
+
+  function openFormatDialog() {
+    formatDialog.showModal();
+  }
+  formatBtn.addEventListener("click", openFormatDialog);
+  formatSubtitle.addEventListener("click", openFormatDialog);
+  formatCloseBtn.addEventListener("click", () => formatDialog.close());
+  formatDialog.addEventListener("click", (e) => {
+    if (e.target === formatDialog) formatDialog.close();
+  });
+  // The card behind the dialog changes shape as the user picks, so re-fit
+  // it once the dialog is gone and the layout has settled.
+  formatDialog.addEventListener("close", () => relayout());
+
+  function restoreFormat() {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(FORMAT_STORAGE_KEY));
+    } catch (err) {
+      /* nothing saved, or unreadable */
+    }
+    applyFormat(saved && saved.id, Boolean(saved && saved.portrait));
+  }
+
   // ---- Help ----
 
   helpBtn.addEventListener("click", () => helpDialog.showModal());
@@ -1578,5 +1715,7 @@
   });
 
   state.grid = makeLeaf();
+  buildFormatList();
+  restoreFormat();
   render();
 })();

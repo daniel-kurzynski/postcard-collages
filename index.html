@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Postcard Collage Creator</title>
-<meta name="description" content="Arrange photos and a greeting on a POKAmax Jumbo postcard and export it as a print-ready PNG.">
+<meta name="description" content="Arrange photos and a greeting on a postcard or photo print and export it as a print-ready PNG.">
 <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c1a17" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -40,6 +40,9 @@
     <symbol id="i-split-cols" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></symbol>
     <symbol id="i-split-rows" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></symbol>
     <symbol id="i-divider" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="8 9 5 12 8 15"/><polyline points="16 9 19 12 16 15"/></symbol>
+    <symbol id="i-format" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="14 9 17 9 17 12"/><polyline points="10 15 7 15 7 12"/></symbol>
+    <symbol id="i-landscape" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/></symbol>
+    <symbol id="i-portrait" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/></symbol>
     <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></symbol>
   </defs>
 </svg>
@@ -48,7 +51,7 @@
   <div class="top">
   <header class="app-header">
     <h1>Postcard Collage Creator</h1>
-    <p class="subtitle"><span class="badge">POKAmax Jumbo</span> 23&nbsp;&times;&nbsp;12&nbsp;cm &middot; 2787&nbsp;&times;&nbsp;1488&nbsp;px</p>
+    <button type="button" id="formatSubtitle" class="subtitle" title="Change the card format"><span id="formatBadge" class="badge">POKAmax Jumbo</span> <span id="formatDetail">postcard, 23 × 12 cm · 2787 × 1488 px · landscape</span></button>
   </header>
 
   <div class="toolbar" role="toolbar" aria-label="Editor actions">
@@ -61,6 +64,10 @@
       <button type="button" id="addTextBtn" class="btn">
         <svg class="icon" aria-hidden="true"><use href="#i-type"/></svg>
         <span class="btn-label">Add text</span>
+      </button>
+      <button type="button" id="formatBtn" class="btn" title="Card format and orientation">
+        <svg class="icon" aria-hidden="true"><use href="#i-format"/></svg>
+        <span class="btn-label">Format</span>
       </button>
     </div>
     <div class="toolbar-group">
@@ -100,6 +107,29 @@
 <!-- File picker for a background tile (opened from the tile's own button). -->
 <input type="file" id="cellInput" accept="image/*" hidden>
 
+<dialog id="formatDialog" class="help" aria-labelledby="formatTitle">
+  <div class="help-inner">
+    <header class="help-header">
+      <h2 id="formatTitle">Card format</h2>
+      <button type="button" id="formatCloseBtn" class="btn btn-icon" aria-label="Close">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </header>
+    <div class="format-body">
+      <div class="segmented" role="radiogroup" aria-label="Orientation">
+        <button type="button" class="seg" role="radio" data-orientation="landscape" aria-checked="true">
+          <svg class="icon" aria-hidden="true"><use href="#i-landscape"/></svg>Landscape
+        </button>
+        <button type="button" class="seg" role="radio" data-orientation="portrait" aria-checked="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-portrait"/></svg>Portrait
+        </button>
+      </div>
+      <ul id="formatList" class="format-list" role="radiogroup" aria-label="Format"></ul>
+      <p class="format-note">Switching keeps your collage: the background tiles re-flow and photos and text are scaled to fit the new card.</p>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="helpDialog" class="help" aria-labelledby="helpTitle">
   <div class="help-inner">
     <header class="help-header">
@@ -121,7 +151,8 @@
       <li><span class="help-glyph glyph-danger"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></span><div><strong>Delete</strong> The red button, or <kbd>Del</kbd> on a keyboard.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></span><div><strong>Keyboard</strong> Arrow keys nudge the selected element (<kbd>Shift</kbd> for larger steps); <kbd>Esc</kbd> leaves crop mode or deselects.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-maximize"/></svg></span><div><strong>More room on a phone</strong> Hold the phone sideways and the toolbar moves to the right edge. The full-screen button hides the browser bars (Android); on any phone, "Add to Home screen" installs the app so it always opens without them.</div></li>
-      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg></span><div><strong>Safety area</strong> The dotted line shows where the print is trimmed: about 6&nbsp;mm at every edge is cut off, so keep faces and text inside it.</div></li>
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg></span><div><strong>Safety area</strong> The dotted line shows where the print may be trimmed (about 6&nbsp;mm at every edge of a POKAmax card, a little less on photo prints), so keep faces and text inside it.</div></li>
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-format"/></svg></span><div><strong>Format</strong> Pick the POKAmax postcard or a 10&nbsp;×&nbsp;15, 13&nbsp;×&nbsp;18 or 16:9 photo print, in landscape or portrait. Your collage is kept and rescaled to the new card.</div></li>
     </ul>
   </div>
 </dialog>
