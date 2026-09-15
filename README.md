@@ -105,6 +105,12 @@ Then open `http://localhost:8000` in a browser.
 No further configuration (no build step, no Node/npm) is needed, since
 `index.html`, `style.css`, and `app.js` are served directly.
 
+GitHub Pages and browsers cache the files for a while, so `index.html`
+links `style.css` and `app.js` with a `?v=N` query. Bump that number
+whenever those files change; otherwise a browser can pair a freshly
+fetched `index.html` with an older cached `app.js` (new buttons then do
+nothing until the cache expires).
+
 ## Structure
 
 ```

@@ -13,7 +13,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<!-- Version query: bump on every release so browsers and GitHub Pages never pair a cached old app.js with a new index.html. -->
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <!-- Icon sprite (stroke icons; referenced via <use href="#i-…">). -->
@@ -159,6 +160,6 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
