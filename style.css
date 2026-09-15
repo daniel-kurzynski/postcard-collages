@@ -144,6 +144,9 @@ body {
   color: var(--ink-soft);
 }
 
+/* Text for icon-only buttons; only shown in the landscape sidebar layout. */
+.icon-label { display: none; }
+
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent-dark);
@@ -595,33 +598,61 @@ kbd {
   .toast.error { background: var(--danger); }
 }
 
-/* ---- Short screens (phones in landscape) ---- */
+/* ---- Landscape on short screens (phones, small tablets) ----
+   The toolbar becomes a narrow column of icon buttons at the right edge so
+   the card can use the full screen height; the title is dropped. */
 
-@media (max-height: 520px) {
-  #app { padding: 10px 12px 12px; gap: 10px; }
+@media (orientation: landscape) and (max-height: 600px) {
+  #app {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 12px;
+    padding: 10px 12px;
+    max-width: none;
+    min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    min-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
   .top {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px 16px;
-    width: min(1100px, 100%);
+    flex-direction: column;
+    justify-content: center;
+    order: 1;
+    flex: none;
   }
-  .app-header { text-align: left; }
-  .app-header h1 { font-size: 1.05rem; margin: 0; white-space: nowrap; }
-  .subtitle { display: none; }
-  .toolbar { width: auto; flex: 1; justify-content: flex-end; gap: 8px; }
-  .toolbar-group { gap: 6px; }
-  .btn { padding: 7px 10px; font-size: 0.82rem; gap: 5px; }
-  .btn-icon { padding: 7px; }
-  .icon { width: 16px; height: 16px; }
-}
-
-/* Short and narrow (small phones in landscape): the title would push the
-   toolbar onto a second row and cost the card height it needs. */
-@media (max-height: 520px) and (max-width: 720px) {
   .app-header { display: none; }
-  .toolbar { justify-content: center; }
+  .stage-wrapper {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    align-items: center;
+  }
+  .toolbar {
+    width: auto;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+  .toolbar-group {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .btn,
+  .btn-icon {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    width: 64px;
+    padding: 6px 4px;
+    font-size: 0.66rem;
+    line-height: 1.1;
+    text-align: center;
+    white-space: normal;
+  }
+  .btn-icon { color: var(--ink); }
+  .btn-secondary { color: var(--ink-soft); }
+  .icon-label { display: inline; }
+  .icon { width: 20px; height: 20px; }
 }
 
 /* ---- Small screens ---- */
