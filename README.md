@@ -33,9 +33,10 @@ into the exported PNG.
 
 ## Features
 
-- The background is a collage grid of tiles: tap a tile to choose its
-  photo (cropped to fill the tile, like `background-size: cover`; drag
-  inside the tile to move the photo around within it). A tile can be split
+- The background is a collage grid of tiles: tap a tile to select it and
+  its buttons appear: choose its photo (cropped to fill the tile, like
+  `background-size: cover`; drag inside the tile to move the photo around
+  within it), split it, or remove it. A tile can be split
   into left/right or top/bottom halves, and each half split again, as often
   as there is room; the white border between two tiles can be dragged to
   change how they share the space, and a tile can be removed again (its

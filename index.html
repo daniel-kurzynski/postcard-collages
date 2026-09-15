@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
 <!-- Version query: bump on every release so browsers and GitHub Pages never pair a cached old app.js with a new index.html. -->
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <!-- Icon sprite (stroke icons; referenced via <use href="#i-…">). -->
@@ -140,7 +140,7 @@
       </button>
     </header>
     <ul class="help-list">
-      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>Background tiles</strong> The card background is made of tiles. Tap a tile to pick its photo, which fills the tile; drag inside a tile to move the photo around within it. <kbd>Del</kbd> empties a selected tile.</div></li>
+      <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>Background tiles</strong> The card background is made of tiles. Tap a tile to select it and get its buttons: pick a photo (it fills the tile), split, or remove. Drag inside a tile to move its photo around. <kbd>Del</kbd> empties a selected tile.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-split-cols"/></svg><svg class="icon" aria-hidden="true"><use href="#i-split-rows"/></svg></span><div><strong>Split</strong> Split a tile into left and right, or top and bottom, halves. Each half can be split again, as often as there is room. The <strong>&times;</strong> on a tile removes it and its neighbour takes over the space.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-divider"/></svg></span><div><strong>Borders</strong> Drag the white border between two tiles to change how the space is shared.</div></li>
       <li><span class="help-glyph"><svg class="icon" aria-hidden="true"><use href="#i-move"/></svg></span><div><strong>Move</strong> Drag a photo or the text anywhere on the card.</div></li>
@@ -160,6 +160,6 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

@@ -292,8 +292,29 @@ body {
   z-index: 8;
 }
 
-.cell-pill.empty,
 .cell-pill.selected { display: flex; }
+
+.cell-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 6px;
+  pointer-events: none;
+}
+.cell-placeholder .placeholder-icon {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.6;
+}
+.cell.selected .cell-placeholder { display: none; }
 
 .pill .cell-photo {
   width: auto;
@@ -870,6 +891,8 @@ kbd {
   /* Tiles are small on a phone; keep their pills compact and centred. */
   .pill.cell-pill { bottom: auto; }
   .pill .cell-photo { padding: 0 8px 0 6px; font-size: 0.66rem; gap: 4px; }
+  .cell-placeholder { font-size: 0.68rem; }
+  .cell-placeholder .placeholder-icon { width: 22px; height: 22px; }
   .divider .grip { height: 20px; }
   .divider-row .grip { width: 20px; height: 4px; }
   .help-list { padding: 6px 16px 14px; }

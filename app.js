@@ -531,6 +531,13 @@
       img.src = cell.src;
       img.draggable = false;
       el.appendChild(img);
+    } else {
+      // Hint that the tile wants a tap; hidden once selected, where the
+      // pill takes its place.
+      const hint = document.createElement("div");
+      hint.className = "cell-placeholder";
+      hint.innerHTML = iconSvg("image", "icon placeholder-icon") + "<span>Tap to choose a photo</span>";
+      el.appendChild(hint);
     }
     attachCellGestures(cell, el);
     return el;
@@ -584,11 +591,10 @@
     });
   }
 
-  // Empty cells always show their pill (that is how a photo gets in);
-  // filled cells only while selected (see CSS).
+  // Shown only while the cell is selected (see CSS).
   function buildCellPill(cell, removable) {
     const pill = document.createElement("div");
-    pill.className = "pill cell-pill" + (cell.img ? "" : " empty");
+    pill.className = "pill cell-pill";
     pill.dataset.cell = cell.id;
     pill.appendChild(
       makePillButton(
