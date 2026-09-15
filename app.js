@@ -7,7 +7,7 @@
 
   // Photo frame: white border, equal thickness on all four sides, sized as
   // a fraction of the frame's own outer width (so it scales with the frame).
-  const BORDER_RATIO = 0.045;
+  const BORDER_RATIO = 0.03;
   // Crop aspect ratios offered in the ratio menu, ordered tall → square → wide.
   const RATIO_PRESETS = [
     { w: 9, h: 16 },
