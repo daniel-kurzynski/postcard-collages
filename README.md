@@ -25,8 +25,8 @@ only and is never drawn into the exported PNG.
   `background-size: cover`)
 - Add any number of photos (several at once via the file picker), shown in
   a white frame with an equal-width border on all four sides
-- Switch a photo's inner crop aspect ratio (pill top-left on each photo:
-  2:3 or 3:2)
+- Pick a photo's crop aspect ratio from the pill top-left on each photo:
+  9:16, 2:3, 3:4, 1:1, 4:3, 3:2 or 16:9 (2:3 is the default)
 - All controls live on the selected element itself (crisp SVG icons, no
   emoji); the **?** button in the toolbar opens a short guide to them
 - Drag photos to move them, drag the corner handle to resize (the frame's

@@ -7,11 +7,18 @@
 
   // Photo frame: white border, equal thickness on all four sides, sized as
   // a fraction of the frame's own outer width (so it scales with the frame).
-  const BORDER_RATIO = 0.09;
+  const BORDER_RATIO = 0.045;
+  // Crop aspect ratios offered in the ratio menu, ordered tall → square → wide.
   const RATIO_PRESETS = [
+    { w: 9, h: 16 },
     { w: 2, h: 3 },
+    { w: 3, h: 4 },
+    { w: 1, h: 1 },
+    { w: 4, h: 3 },
     { w: 3, h: 2 },
+    { w: 16, h: 9 },
   ];
+  const DEFAULT_RATIO = RATIO_PRESETS[1]; // 2:3
 
   const FONT_FAMILY = "'Caveat', cursive";
   const MIN_PHOTO_W = 180;
@@ -466,13 +473,28 @@
       (e) => startResizePhoto(e, p, el)
     );
 
-    const ratioBtn = makeHandle("handle-ratio", `${p.ratioW}:${p.ratioH}`, "Switch aspect ratio");
+    // Aspect ratio: the pill shows the current ratio and opens a menu of all
+    // presets just inside the frame's top edge.
+    const ratioBtn = makeHandle("handle-ratio", `${p.ratioW}:${p.ratioH}`, "Aspect ratio");
+    const ratioMenu = document.createElement("div");
+    ratioMenu.className = "pill ratio-menu";
+    RATIO_PRESETS.forEach((r) => {
+      const opt = makePillButton(`${r.w}:${r.h}`, `Aspect ratio ${r.w}:${r.h}`, () => {
+        setRatio(p, el, r);
+        ratioMenu.classList.remove("open");
+      }, "ratio-option");
+      opt.dataset.ratio = `${r.w}:${r.h}`;
+      opt.classList.toggle("current", r.w === p.ratioW && r.h === p.ratioH);
+      ratioMenu.appendChild(opt);
+    });
     ratioBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    ratioBtn.addEventListener("dblclick", (e) => e.stopPropagation());
     ratioBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      cycleRatio(p, el, ratioBtn);
+      ratioMenu.classList.toggle("open");
     });
     el.appendChild(ratioBtn);
+    el.appendChild(ratioMenu);
 
     const panBtn = makeHandle(
       "handle-pan",
@@ -510,22 +532,27 @@
     return el;
   }
 
-  function cycleRatio(p, el, ratioBtn) {
-    const idx = RATIO_PRESETS.findIndex(
-      (r) => r.w === p.ratioW && r.h === p.ratioH
-    );
-    const next = RATIO_PRESETS[(idx + 1) % RATIO_PRESETS.length];
-    p.ratioW = next.w;
-    p.ratioH = next.h;
+  function setRatio(p, el, r) {
+    p.ratioW = r.w;
+    p.ratioH = r.h;
     p.h = outerHeightFor(p.w, p.ratioW, p.ratioH);
     p.imgScale = 1;
     p.panX = 0.5;
     p.panY = 0.5;
-    ratioBtn.textContent = `${p.ratioW}:${p.ratioH}`;
+    const label = `${r.w}:${r.h}`;
+    el.querySelector(".handle-ratio").textContent = label;
+    el.querySelectorAll(".ratio-option").forEach((opt) => {
+      opt.classList.toggle("current", opt.dataset.ratio === label);
+    });
     applyPhotoGeometry(p, el);
   }
 
+  function closeRatioMenus() {
+    layersContainer.querySelectorAll(".ratio-menu.open").forEach((m) => m.classList.remove("open"));
+  }
+
   function togglePanning(p, el) {
+    closeRatioMenus();
     const next = !p.isPanning;
     state.photos.forEach((other) => {
       if (other !== p && other.isPanning) {
@@ -644,6 +671,7 @@
   // by a selection change at the start of that same gesture.
   function select(id) {
     if (state.selectedId === id) return;
+    closeRatioMenus();
     const prevId = state.selectedId;
     const prevEl = layersContainer.querySelector(".layer.selected");
     if (prevEl) prevEl.classList.remove("selected");
@@ -734,6 +762,7 @@
   function startMove(e, layer, el) {
     if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
     e.preventDefault();
+    closeRatioMenus();
     select(layer.id);
     safeSetPointerCapture(el, e.pointerId);
     const startClientX = e.clientX;
@@ -769,6 +798,7 @@
   function startPan(e, p, el, isMultiTouch = () => false) {
     e.preventDefault();
     e.stopPropagation();
+    closeRatioMenus();
     select(p.id);
     safeSetPointerCapture(el, e.pointerId);
     const { iw, ih } = getInnerRect(p);
@@ -814,6 +844,7 @@
 
   function startResizePhoto(e, p, el) {
     e.preventDefault();
+    closeRatioMenus();
     select(p.id);
     const handle = e.currentTarget;
     safeSetPointerCapture(handle, e.pointerId);
@@ -914,8 +945,8 @@
     const [fx, fy] = PHOTO_SPAWN_SPOTS[count % PHOTO_SPAWN_SPOTS.length];
     const extraCycles = Math.floor(count / PHOTO_SPAWN_SPOTS.length);
     const jitter = extraCycles * CANVAS_W * 0.03;
-    const ratioW = RATIO_PRESETS[0].w;
-    const ratioH = RATIO_PRESETS[0].h;
+    const ratioW = DEFAULT_RATIO.w;
+    const ratioH = DEFAULT_RATIO.h;
     const layer = {
       id: genId(),
       img,
@@ -1065,8 +1096,8 @@
 
         ctx.save();
         ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = b * 0.6;
-        ctx.shadowOffsetY = b * 0.25;
+        ctx.shadowBlur = p.w * 0.055;
+        ctx.shadowOffsetY = p.w * 0.022;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(p.x, p.y, p.w, p.h);
         ctx.restore();
